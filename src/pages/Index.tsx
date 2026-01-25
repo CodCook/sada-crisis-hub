@@ -7,45 +7,47 @@ import { LayerControl } from "@/components/dashboard/LayerControl";
 import { FusionEngineWidget } from "@/components/dashboard/FusionEngineWidget";
 import { ActionModal } from "@/components/dashboard/ActionModal";
 
-// Initial cluster data
+// Initial cluster data - positioned relative to Khartoum geography
+// The Y-shape confluence: Blue Nile (east) + White Nile (west) meeting at center
 const initialClusters = [
-  { id: "1", status: "critical" as const, x: 35, y: 30, label: "Al-Riyadh Block 4" },
-  { id: "2", status: "critical" as const, x: 58, y: 45, label: "Bahri District 7" },
-  { id: "3", status: "warning" as const, x: 25, y: 55, label: "Omdurman West" },
-  { id: "4", status: "warning" as const, x: 70, y: 35, label: "Khartoum North 3" },
-  { id: "5", status: "safe" as const, x: 45, y: 65, label: "Soba Industrial" },
-  { id: "6", status: "safe" as const, x: 80, y: 60, label: "Airport Zone" },
-  { id: "7", status: "warning" as const, x: 15, y: 40, label: "Karari Sector" },
-  { id: "8", status: "safe" as const, x: 65, y: 75, label: "New Khartoum" },
+  { id: "1", status: "critical" as const, x: 55, y: 25, label: "Bahri Central" }, // North Khartoum [32.53, 15.60]
+  { id: "2", status: "warning" as const, x: 30, y: 20, label: "Omdurman Souq" }, // Omdurman [32.48, 15.64]
+  { id: "3", status: "safe" as const, x: 60, y: 55, label: "Al-Riyadh Block 4" }, // Al-Riyadh [32.55, 15.55]
+  { id: "4", status: "warning" as const, x: 45, y: 40, label: "Khartoum Central" }, // Near confluence
+  { id: "5", status: "safe" as const, x: 70, y: 65, label: "Soba Industrial" },
+  { id: "6", status: "critical" as const, x: 25, y: 45, label: "Omdurman West" },
+  { id: "7", status: "warning" as const, x: 15, y: 35, label: "Karari Sector" },
+  { id: "8", status: "safe" as const, x: 75, y: 45, label: "Burri District" },
 ];
 
-// Initial signals
+// Initial signals - Khartoum locations
 const initialSignals: Signal[] = [
-  { id: "1", time: "10:42 AM", type: "BROKEN", location: "Al-Riyadh Block 4", source: "SMS" },
-  { id: "2", time: "10:38 AM", type: "DIRTY", location: "Bahri District 7", source: "SENSOR" },
+  { id: "1", time: "10:42 AM", type: "BROKEN", location: "Bahri Central", source: "SMS" },
+  { id: "2", time: "10:38 AM", type: "DIRTY", location: "Omdurman Souq", source: "SENSOR" },
   { id: "3", time: "10:35 AM", type: "OUTAGE", location: "Omdurman West", source: "SATELLITE" },
-  { id: "4", time: "10:30 AM", type: "RESTORED", location: "Soba Industrial", source: "FIELD" },
-  { id: "5", time: "10:25 AM", type: "BROKEN", location: "Khartoum North 3", source: "SMS" },
+  { id: "4", time: "10:30 AM", type: "RESTORED", location: "Al-Riyadh Block 4", source: "FIELD" },
+  { id: "5", time: "10:25 AM", type: "BROKEN", location: "Khartoum Central", source: "SMS" },
   { id: "6", time: "10:20 AM", type: "DIRTY", location: "Karari Sector", source: "SMS" },
 ];
 
-// Sample locations for simulation
+// Sample locations for simulation - Khartoum neighborhoods
 const sampleLocations = [
-  "Al-Sahafa Block 2",
+  "Bahri Central",
+  "Omdurman Souq",
+  "Al-Riyadh Block 4",
   "Burri District",
-  "Arkawit Sector 5",
-  "Jabra Industrial",
-  "Al-Amarat Block 1",
-  "Riyadh Extension",
-  "Kalakla South",
+  "Khartoum Central",
   "Shambat Area",
+  "Kalakla South",
+  "Jabra Industrial",
 ];
 
 const clusterDataMap: Record<string, { location: string; block: string; severity: string; reports: number; lastReport: string }> = {
-  "1": { location: "Al-Riyadh", block: "Block 4", severity: "CRITICAL", reports: 52, lastReport: "2 min ago" },
-  "2": { location: "Bahri", block: "District 7", severity: "CRITICAL", reports: 38, lastReport: "5 min ago" },
-  "3": { location: "Omdurman", block: "West Sector", severity: "HIGH", reports: 24, lastReport: "12 min ago" },
-  "4": { location: "Khartoum North", block: "Sector 3", severity: "MEDIUM", reports: 15, lastReport: "20 min ago" },
+  "1": { location: "Bahri", block: "Central District", severity: "CRITICAL", reports: 52, lastReport: "2 min ago" },
+  "2": { location: "Omdurman", block: "Souq Area", severity: "HIGH", reports: 24, lastReport: "12 min ago" },
+  "3": { location: "Al-Riyadh", block: "Block 4", severity: "STABLE", reports: 8, lastReport: "45 min ago" },
+  "4": { location: "Khartoum", block: "Central", severity: "MEDIUM", reports: 15, lastReport: "20 min ago" },
+  "6": { location: "Omdurman", block: "West Sector", severity: "CRITICAL", reports: 38, lastReport: "5 min ago" },
 };
 
 export default function Index() {

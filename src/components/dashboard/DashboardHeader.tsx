@@ -19,8 +19,8 @@ export function DashboardHeader({ criticalCount, warningCount, safeCount }: Dash
           <Shield className="w-5 h-5 text-crisis-safe" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-foreground tracking-tight">SADA Re-Connect</h1>
-          <p className="text-[10px] text-muted-foreground font-mono -mt-0.5">Crisis Response Dashboard</p>
+          <h1 className="text-lg font-bold text-foreground tracking-tight">SADA RE-CONNECT</h1>
+          <p className="text-[10px] text-muted-foreground font-mono -mt-0.5">[SUDAN RECONSTRUCTION GRID]</p>
         </div>
       </div>
 
