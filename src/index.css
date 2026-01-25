@@ -211,6 +211,33 @@
     );
     pointer-events: none;
   }
+
+  /* Nile river flowing animations */
+  @keyframes nile-shimmer {
+    0%, 100% {
+      stroke-dashoffset: 0;
+      opacity: 0.6;
+    }
+    50% {
+      stroke-dashoffset: -10;
+      opacity: 0.8;
+    }
+  }
+
+  .nile-flow-white {
+    stroke-dasharray: 3, 2;
+    animation: nile-shimmer 2s ease-in-out infinite;
+  }
+
+  .nile-flow-blue {
+    stroke-dasharray: 4, 2;
+    animation: nile-shimmer 1.8s ease-in-out infinite 0.3s;
+  }
+
+  .nile-flow-main {
+    stroke-dasharray: 5, 3;
+    animation: nile-shimmer 1.5s ease-in-out infinite 0.6s;
+  }
 }
 
 @layer utilities {
