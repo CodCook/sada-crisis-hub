@@ -23,9 +23,20 @@ interface MapPlaceholderProps {
 export function MapPlaceholder({ clusters, selectedCluster, onClusterClick, layers }: MapPlaceholderProps) {
   return (
     <div className="relative w-full h-full bg-[#0a0f14] overflow-hidden">
-      {/* Grid pattern background */}
+      {/* Khartoum map background */}
       <div 
-        className="absolute inset-0 opacity-20"
+        className="absolute inset-0 opacity-40"
+        style={{
+          backgroundImage: `url('https://static.vecteezy.com/system/resources/previews/011/324/668/original/khartoum-sudan-city-map-dark-mode-free-vector.jpg')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'hue-rotate(180deg) saturate(0.5)',
+        }}
+      />
+      
+      {/* Grid overlay for tactical look */}
+      <div 
+        className="absolute inset-0 opacity-10"
         style={{
           backgroundImage: `
             linear-gradient(to right, hsl(217 33% 20%) 1px, transparent 1px),
@@ -34,6 +45,46 @@ export function MapPlaceholder({ clusters, selectedCluster, onClusterClick, laye
           backgroundSize: '40px 40px',
         }}
       />
+      
+      {/* Nile River Y-Shape visualization */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {/* White Nile - coming from southwest */}
+        <path
+          d="M 5 80 Q 20 60, 45 45"
+          stroke="hsl(200 80% 50%)"
+          strokeWidth="1.5"
+          fill="none"
+          opacity="0.4"
+          className="animate-pulse"
+        />
+        {/* Blue Nile - coming from southeast */}
+        <path
+          d="M 95 70 Q 70 55, 45 45"
+          stroke="hsl(210 90% 45%)"
+          strokeWidth="1.5"
+          fill="none"
+          opacity="0.5"
+          className="animate-pulse"
+        />
+        {/* Main Nile - flowing north after confluence */}
+        <path
+          d="M 45 45 Q 50 30, 55 10"
+          stroke="hsl(205 85% 48%)"
+          strokeWidth="2"
+          fill="none"
+          opacity="0.6"
+          className="animate-pulse"
+        />
+        {/* Confluence point glow */}
+        <circle
+          cx="45"
+          cy="45"
+          r="3"
+          fill="hsl(200 80% 50%)"
+          opacity="0.3"
+          className="animate-pulse"
+        />
+      </svg>
 
       {/* Scanline overlay */}
       <div className="absolute inset-0 scanline-overlay" />
@@ -94,13 +145,13 @@ export function MapPlaceholder({ clusters, selectedCluster, onClusterClick, laye
       {/* Map label */}
       <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded bg-surface-glass/80 border border-border">
         <Map className="w-4 h-4 text-crisis-safe" />
-        <span className="text-xs font-mono text-muted-foreground">Mapbox GL JS</span>
+        <span className="text-xs font-mono text-muted-foreground">KHARTOUM GRID • 32.5599°E, 15.5007°N</span>
       </div>
 
       {/* Region label */}
       <div className="absolute top-4 right-1/2 translate-x-1/2 px-4 py-2 rounded bg-surface-glass/80 border border-border">
-        <span className="text-sm font-semibold text-foreground">Khartoum Metropolitan Area</span>
-        <span className="text-xs text-muted-foreground block text-center font-mono">15.5007° N, 32.5599° E</span>
+        <span className="text-sm font-semibold text-foreground">Khartoum • Omdurman • Bahri</span>
+        <span className="text-xs text-muted-foreground block text-center font-mono">NILE CONFLUENCE ZONE</span>
       </div>
 
       {/* Cluster dots */}
