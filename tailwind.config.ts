@@ -57,6 +57,16 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        crisis: {
+          critical: "hsl(var(--crisis-critical))",
+          warning: "hsl(var(--crisis-warning))",
+          safe: "hsl(var(--crisis-safe))",
+          info: "hsl(var(--crisis-info))",
+        },
+        surface: {
+          elevated: "hsl(var(--surface-elevated))",
+          glass: "hsl(var(--surface-glass))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -65,25 +75,40 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        "pulse-critical": {
+          "0%, 100%": {
+            transform: "scale(1)",
+            boxShadow: "0 0 0 0 hsl(var(--crisis-critical) / 0.7)",
           },
-          to: {
-            height: "0",
+          "50%": {
+            transform: "scale(1.1)",
+            boxShadow: "0 0 20px 8px hsl(var(--crisis-critical) / 0.4)",
+          },
+        },
+        "glow-safe": {
+          "0%, 100%": {
+            boxShadow: "0 0 8px 2px hsl(var(--crisis-safe) / 0.4)",
+          },
+          "50%": {
+            boxShadow: "0 0 16px 4px hsl(var(--crisis-safe) / 0.6)",
           },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-critical": "pulse-critical 2s ease-in-out infinite",
+        "glow-safe": "glow-safe 3s ease-in-out infinite",
+      },
+      fontFamily: {
+        mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
     },
   },
