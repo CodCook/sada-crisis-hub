@@ -15,14 +15,20 @@ Months of intense fighting in **Khartoum and Omdurman** have decimated key infra
 
 ## 🚀 Hackathon Submission Details
 
+### Submission Status
+- [x] **Public GitHub Repository**: Operational at your repo URL.
+- [x] **Working Functional MVP**: SMS-to-Map pipeline fully implemented.
+- [x] **Clear Readme**: Instructions for setup and demo included.
+
 ### Deadlines & Artifacts
-- **MVP Submission (Jan 27)**: Full proposal, Source Code, and MVP Video (max 4:00 mins).
-- **Final Submission (Jan 31)**: Updated proposal, Enhanced code, Slides, Demo Video, and Feedback Form.
+- **MVP Submission (Jan 27)**: [x] Proposal | [x] Source Code | [ ] MVP Video.
+- **Final Submission (Jan 31)**: [ ] Enhanced Code | [ ] Slides | [ ] Demo Video.
 
 ## ✨ Core Features
 
 - **Live Signal Fusion**: Real-time ingest of SMS reports (`#BROKEN`, `#DIRTY`), satellite anomalies, and sensor data.
-- **Infrastructure Gap Mapping**: Visualizing the "Zero-Lumen Zones" and water contamination clusters in Bahri and Al-Riyadh.
+- **Dynamic Leaflet-GIS Map**: Real-time plotting of crisis markers on a dynamic, high-performance map of Khartoum, Omdurman, and Bahri.
+- **Infrastructure Gap Mapping**: Visualizing "Zero-Lumen Zones" and water contamination clusters using real-world coordinates.
 - **Low-Connectivity Engine**: Optimized for SMS-based crowd-sourcing where mobile data is a luxury.
 - **Response Orchestration**: Direct dispatch hooks for electrical repair teams and 10,000L water tankers.
 
@@ -61,3 +67,9 @@ Backend Simulator: `http://localhost:8001`
 ---
 
 *Impact Metric: Reduction in time spent by residents searching for water through real-time map updates.*
+
+## 📜 Credits
+Developed for the **SADA Crisis Hub Hackathon**. Special thanks to the humanitarian responders and community leads in Khartoum for providing the "Ground Truth" context for SPS#3.
+
+## ⚖️ License
+This project is open-sourced under the **MIT License**.

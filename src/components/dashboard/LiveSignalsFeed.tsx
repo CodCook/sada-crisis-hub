@@ -9,6 +9,7 @@ export interface Signal {
   time: string;
   type: "DIRTY" | "BROKEN" | "OUTAGE" | "RESTORED" | "SOS";
   location: string;
+  coords: [number, number];
   source: "SMS" | "SENSOR" | "SATELLITE" | "FIELD";
   body?: string;
   priority?: number;
@@ -35,48 +36,8 @@ const sourceStyles: Record<Signal["source"], string> = {
   FIELD: "text-muted-foreground",
 };
 
-export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSignalsFeedProps) {
-  const [signals, setSignals] = useState<Signal[]>(initialSignals);
-
-  // Poll backend for new messages every 5 seconds
-  useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch("http://localhost:8001/messages?limit=20");
-        if (!res.ok) return;
-        const data = await res.json();
-        const enriched = data.map((msg: any, idx: number) => ({
-          id: msg.timestamp + (msg.from || "unknown") + idx,
-          time: new Date(msg.timestamp).toLocaleTimeString(),
-          type: msg.signal_type as any,
-          location: msg.location || "Unknown Sector",
-          source: msg.from === "demo" ? "FIELD" : "SMS",
-          body: msg.body,
-          priority: msg.priority,
-          action: msg.action,
-        }));
-        setSignals((prev) => {
-          const existing = new Set(prev.map((s) => s.id));
-          const newMsgs = enriched.filter((m: any) => !existing.has(m.id));
-          if (newMsgs.length === 0) return prev;
-
-          // Trigger toast for new reports if they are urgent
-          newMsgs.forEach((m: any) => {
-            if (m.type === "SOS" || m.priority > 90) {
-              console.log("URGENT SIGNAL RECEIVED:", m);
-            }
-          });
-
-          return [...newMsgs, ...prev].slice(0, 50);
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
-  }, []);
+export function LiveSignalsFeed({ signals, onSimulate }: LiveSignalsFeedProps) {
+  // Signals are now managed by the parent (Index) to ensure map sync
 
   return (
     <div className="h-full flex flex-col bg-sidebar border-r border-sidebar-border">
@@ -101,8 +62,8 @@ export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSig
             <div
               key={signal.id}
               className={`signal-item p-3 rounded-lg border transition-all cursor-pointer ${signal.type === "SOS"
-                  ? "bg-crisis-critical/10 border-crisis-critical shadow-[0_0_15px_rgba(234,56,76,0.2)] animate-pulse"
-                  : "bg-surface-elevated border-border hover:border-muted-foreground/5 shadow-sm"
+                ? "bg-crisis-critical/10 border-crisis-critical shadow-[0_0_15px_rgba(234,56,76,0.2)] animate-pulse"
+                : "bg-surface-elevated border-border hover:border-muted-foreground/5 shadow-sm"
                 }`}
             >
               <div className="flex items-start justify-between gap-2">

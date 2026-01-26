@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { LiveSignalsFeed, Signal } from "@/components/dashboard/LiveSignalsFeed";
-import { MapPlaceholder } from "@/components/dashboard/MapPlaceholder";
+import { LeafletMap } from "@/components/dashboard/LeafletMap";
 import { LayerControl } from "@/components/dashboard/LayerControl";
 import { FusionEngineWidget } from "@/components/dashboard/FusionEngineWidget";
 import { ActionModal } from "@/components/dashboard/ActionModal";
@@ -22,12 +22,12 @@ const initialClusters = [
 
 // Initial signals - Khartoum locations
 const initialSignals: Signal[] = [
-  { id: "1", time: "10:42 AM", type: "BROKEN", location: "Bahri Central", source: "SMS" },
-  { id: "2", time: "10:38 AM", type: "DIRTY", location: "Omdurman Souq", source: "SENSOR" },
-  { id: "3", time: "10:35 AM", type: "OUTAGE", location: "Omdurman West", source: "SATELLITE" },
-  { id: "4", time: "10:30 AM", type: "RESTORED", location: "Al-Riyadh Block 4", source: "FIELD" },
-  { id: "5", time: "10:25 AM", type: "BROKEN", location: "Khartoum Central", source: "SMS" },
-  { id: "6", time: "10:20 AM", type: "DIRTY", location: "Karari Sector", source: "SMS" },
+  { id: "1", time: "10:42 AM", type: "BROKEN", location: "Bahri Central", coords: [15.60, 32.53], source: "SMS" },
+  { id: "2", time: "10:38 AM", type: "DIRTY", location: "Omdurman Souq", coords: [15.64, 32.48], source: "SENSOR" },
+  { id: "3", time: "10:35 AM", type: "OUTAGE", location: "Omdurman West", coords: [15.65, 32.45], source: "SATELLITE" },
+  { id: "4", time: "10:30 AM", type: "RESTORED", location: "Al-Riyadh Block 4", coords: [15.55, 32.55], source: "FIELD" },
+  { id: "5", time: "10:25 AM", type: "BROKEN", location: "Khartoum Central", coords: [15.58, 32.53], source: "SMS" },
+  { id: "6", time: "10:20 AM", type: "DIRTY", location: "Karari Sector", coords: [15.68, 32.47], source: "SMS" },
 ];
 
 // Sample locations for simulation - Khartoum neighborhoods
@@ -60,8 +60,51 @@ export default function Index() {
   const [layers, setLayers] = useState({
     satellite: true,
     smsReports: true,
-    waterPipelines: false,
+    waterPipelines: true,
   });
+
+  // Global Sync: Poll backend for new messages every 5 seconds
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch("http://localhost:8001/messages?limit=20");
+        if (!res.ok) return;
+        const data = await res.json();
+        const enriched = data.map((msg: any, idx: number) => ({
+          id: msg.id || (msg.timestamp + idx),
+          time: new Date(msg.timestamp).toLocaleTimeString(),
+          type: msg.signal_type as any,
+          location: msg.location || "Unknown Sector",
+          coords: msg.coords || [15.58, 32.53],
+          source: msg.from === "demo" ? "FIELD" : "SMS",
+          body: msg.body,
+          priority: msg.priority,
+          action: msg.action,
+        }));
+        setSignals((prev) => {
+          const existing = new Set(prev.map((s) => s.id));
+          const newMsgs = enriched.filter((m: any) => !existing.has(m.id));
+          if (newMsgs.length === 0) return prev;
+
+          // Trigger toast for new reports
+          newMsgs.forEach((m: any) => {
+            if (m.type === "SOS" || m.priority > 90) {
+              toast.error(`URGENT: ${m.type} at ${m.location}`, {
+                description: m.action
+              });
+            }
+          });
+
+          return [...newMsgs, ...prev].slice(0, 50);
+        });
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const criticalCount = clusters.filter(c => c.status === "critical").length;
   const warningCount = clusters.filter(c => c.status === "warning").length;
@@ -90,6 +133,7 @@ export default function Index() {
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       type: types[Math.floor(Math.random() * types.length)],
       location: sampleLocations[Math.floor(Math.random() * sampleLocations.length)],
+      coords: [15.58, 32.53], // Default static for simulation
       source: sources[Math.floor(Math.random() * sources.length)],
     };
 
@@ -164,7 +208,8 @@ export default function Index() {
 
         {/* Map Area */}
         <main className="flex-1 relative">
-          <MapPlaceholder
+          <LeafletMap
+            signals={signals}
             clusters={clusters}
             selectedCluster={selectedCluster}
             onClusterClick={handleClusterClick}
@@ -172,7 +217,7 @@ export default function Index() {
           />
 
           {/* Layer Control - Bottom Left */}
-          <div className="absolute bottom-20 left-4 z-20">
+          <div className="absolute bottom-20 left-4 z-[1100]">
             <LayerControl
               layers={layers}
               onToggle={handleLayerToggle}
@@ -180,7 +225,7 @@ export default function Index() {
           </div>
 
           {/* Fusion Engine Widget - Top Right */}
-          <div className="absolute top-4 right-4 z-20">
+          <div className="absolute top-4 right-4 z-[1100]">
             <FusionEngineWidget
               isActive={selectedCluster !== null && clusters.find(c => c.id === selectedCluster)?.status === "critical"}
               confidenceScore={confidenceScore}

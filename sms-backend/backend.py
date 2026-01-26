@@ -7,6 +7,7 @@ import random
 import asyncio
 from datetime import datetime
 import re
+import uuid
 
 # In-memory store for received SMS reports
 message_store: list[dict] = []
@@ -163,31 +164,31 @@ async def simulator():
 
 LOCATIONS = {
     # Al-Riyadh
-    "RIYADH": "Al-Riyadh Block 4",
+    "RIYADH": {"name": "Al-Riyadh Block 4", "coords": [15.556, 32.553]},
     # Omdurman
-    "OMDURMAN": "Omdurman Central",
-    "SOUQ": "Omdurman Souq",
-    "OMDURMAN WEST": "Omdurman West",
-    "KARARI": "Karari Sector",
+    "OMDURMAN": {"name": "Omdurman Central", "coords": [15.642, 32.482]},
+    "SOUQ": {"name": "Omdurman Souq", "coords": [15.635, 32.485]},
+    "OMDURMAN WEST": {"name": "Omdurman West", "coords": [15.650, 32.450]},
+    "KARARI": {"name": "Karari Sector", "coords": [15.680, 32.470]},
     # Bahri
-    "BAHRI": "Bahri North",
-    "BAHRI CENTRAL": "Bahri Central",
-    "SHAMBAT": "Shambat Area",
+    "BAHRI": {"name": "Bahri North", "coords": [15.620, 32.540]},
+    "BAHRI CENTRAL": {"name": "Bahri Central", "coords": [15.600, 32.530]},
+    "SHAMBAT": {"name": "Shambat Area", "coords": [15.625, 32.525]},
     # Khartoum
-    "KHARTOUM": "Khartoum Central",
-    "BURRI": "Burri District",
-    "KALAKLA": "Kalakla South",
-    "JABRA": "Jabra Industrial",
+    "KHARTOUM": {"name": "Khartoum Central", "coords": [15.589, 32.535]},
+    "BURRI": {"name": "Burri District", "coords": [15.575, 32.560]},
+    "KALAKLA": {"name": "Kalakla South", "coords": [15.480, 32.510]},
+    "JABRA": {"name": "Jabra Industrial", "coords": [15.520, 32.530]},
 }
 
-def extract_location(text: str) -> str:
+def extract_location(text: str) -> dict:
     text = text.upper()
-    # Sort keys by length descending to match more specific strings first (e.g., "Al-Riyadh" before "Khartoum")
+    # Sort keys by length descending to match more specific strings first
     sorted_keys = sorted(LOCATIONS.keys(), key=len, reverse=True)
     for key in sorted_keys:
         if key in text:
             return LOCATIONS[key]
-    return "Unknown Sector"
+    return {"name": "Unknown Sector", "coords": [15.58, 32.53]} # Default to central Khartoum
 
 def calculate_priority(satellite_score: int, reports_count: int, infrastructure_score: int, is_sos: bool = False) -> float:
     if is_sos: return 100.0
@@ -223,9 +224,13 @@ async def getsms(request: Request):
     elif "#BROKEN" in body: signal_type = "BROKEN"
     elif "#DIRTY" in body or "#WATER" in body: signal_type = "DIRTY"
     
-    location = extract_location(body)
+    loc_data = extract_location(body)
+    location = loc_data["name"]
+    coords = loc_data["coords"]
     # Special case for the script: if it mentions Al-Riyadh
-    if "RIYADH" in body: location = "Al-Riyadh Block 4"
+    if "RIYADH" in body: 
+        location = LOCATIONS["RIYADH"]["name"]
+        coords = LOCATIONS["RIYADH"]["coords"]
 
     satellite, infrastructure = get_proxy_data()
     is_sos = (signal_type == "SOS")
@@ -233,14 +238,17 @@ async def getsms(request: Request):
     action = determine_action(priority, signal_type)
     
     msg_entry = {
+        "id": str(uuid.uuid4()),
         "body": body,
         "from": from_number,
         "timestamp": datetime.utcnow().isoformat(),
         "signal_type": signal_type,
         "location": location,
+        "coords": coords,
         "priority": priority,
         "action": action,
     }
+    print(f"DEBUG: Received {signal_type} from {location} ({coords})")
     message_store.append(msg_entry)
     
     resp = MessagingResponse()
@@ -252,31 +260,38 @@ async def run_demo(type: str = "water", loc: str = ""):
     """
     Simulates reports for the demo script.
     """
+    loc_data = LOCATIONS.get("SOUQ") # Default
     if type.lower() == "sos":
         signal_type = "SOS"
         location = "Khartoum West"
+        coords = [15.55, 32.45]
     elif type.lower() == "power":
         signal_type = "BROKEN"
-        location = "Al-Riyadh Block 4"
+        location = LOCATIONS["RIYADH"]["name"]
+        coords = LOCATIONS["RIYADH"]["coords"]
     else:
         signal_type = "DIRTY"
-        location = loc if loc else "Omdurman Souq"
+        location = loc if loc else LOCATIONS["SOUQ"]["name"]
+        coords = LOCATIONS["SOUQ"]["coords"]
     
     satellite, infrastructure = get_proxy_data()
-    reports_count = 1 if type.lower() == "power" else 12 # Power start is "single report", SOS is instant
+    reports_count = 1 if type.lower() == "power" else 12 
     
     priority = calculate_priority(satellite, reports_count, infrastructure, signal_type == "SOS")
     action = determine_action(priority, signal_type)
     
     msg_entry = {
+        "id": str(uuid.uuid4()),
         "body": f"DEMO: {signal_type} SIGNAL",
         "from": "demo",
         "timestamp": datetime.utcnow().isoformat(),
         "signal_type": signal_type,
         "location": location,
+        "coords": coords,
         "priority": priority,
         "action": action,
     }
+    print(f"DEBUG: Demo signal {signal_type} created for {location}")
     message_store.append(msg_entry)
     return {"status": "success", "message": msg_entry}
 
