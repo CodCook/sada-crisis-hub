@@ -2,17 +2,21 @@ import { Radio, Plus, AlertTriangle, Droplet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEffect, useState } from "react";
 
 export interface Signal {
   id: string;
   time: string;
-  type: "DIRTY" | "BROKEN" | "OUTAGE" | "RESTORED";
+  type: "DIRTY" | "BROKEN" | "OUTAGE" | "RESTORED" | "SOS";
   location: string;
   source: "SMS" | "SENSOR" | "SATELLITE" | "FIELD";
+  body?: string;
+  priority?: number;
+  action?: string;
 }
 
 interface LiveSignalsFeedProps {
-  signals: Signal[];
+  signals: Signal[]; // initial signals (optional)
   onSimulate: () => void;
 }
 
@@ -21,6 +25,7 @@ const typeBadgeStyles: Record<Signal["type"], string> = {
   BROKEN: "bg-crisis-critical/20 text-crisis-critical border-crisis-critical/50",
   OUTAGE: "bg-crisis-critical/20 text-crisis-critical border-crisis-critical/50",
   RESTORED: "bg-crisis-safe/20 text-crisis-safe border-crisis-safe/50",
+  SOS: "bg-crisis-critical/20 text-crisis-critical border-crisis-critical/50",
 };
 
 const sourceStyles: Record<Signal["source"], string> = {
@@ -30,7 +35,40 @@ const sourceStyles: Record<Signal["source"], string> = {
   FIELD: "text-muted-foreground",
 };
 
-export function LiveSignalsFeed({ signals, onSimulate }: LiveSignalsFeedProps) {
+export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSignalsFeedProps) {
+  const [signals, setSignals] = useState<Signal[]>(initialSignals);
+
+  // Poll backend for new messages every 5 seconds
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/messages?limit=20");
+        if (!res.ok) return;
+        const data = await res.json();
+        const enriched = data.map((msg: any, idx: number) => ({
+          id: msg.timestamp + idx,
+          time: new Date(msg.timestamp).toLocaleTimeString(),
+          type: msg.signal_type as any,
+          location: msg.body?.includes("#BROKEN") ? "Al-Riyadh Block 4" : "Unknown",
+          source: msg.from === "demo" ? "FIELD" : "SMS",
+          body: msg.body,
+          priority: msg.priority,
+          action: msg.action,
+        }));
+        setSignals((prev) => {
+          const existing = new Set(prev.map((s) => s.id));
+          const newMsgs = enriched.filter((m) => !existing.has(m.id));
+          return [...newMsgs, ...prev].slice(0, 50);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="h-full flex flex-col bg-sidebar border-r border-sidebar-border">
       {/* Header */}
@@ -53,20 +91,20 @@ export function LiveSignalsFeed({ signals, onSimulate }: LiveSignalsFeedProps) {
           {signals.map((signal) => (
             <div
               key={signal.id}
-              className="signal-item p-3 rounded-lg bg-surface-elevated border border-border hover:border-muted-foreground/50 transition-colors cursor-pointer"
+              className="signal-item p-3 rounded-lg bg-surface-elevated border border-border hover:border-muted-foreground/5 transition-colors cursor-pointer"
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-xs font-mono text-muted-foreground">
                   {signal.time}
                 </span>
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={`text-[10px] px-1.5 py-0 ${typeBadgeStyles[signal.type]}`}
                 >
                   #{signal.type}
                 </Badge>
               </div>
-              
+
               <div className="mt-2 flex items-center gap-2">
                 {signal.type === "DIRTY" || signal.type === "BROKEN" ? (
                   <AlertTriangle className="w-3.5 h-3.5 text-crisis-warning" />
@@ -79,7 +117,7 @@ export function LiveSignalsFeed({ signals, onSimulate }: LiveSignalsFeedProps) {
                   {signal.location}
                 </span>
               </div>
-              
+
               <div className="mt-1.5 flex items-center justify-between">
                 <span className={`text-xs font-mono ${sourceStyles[signal.source]}`}>
                   via {signal.source}
@@ -92,7 +130,7 @@ export function LiveSignalsFeed({ signals, onSimulate }: LiveSignalsFeedProps) {
 
       {/* Simulate Button */}
       <div className="p-4 border-t border-sidebar-border">
-        <Button 
+        <Button
           onClick={onSimulate}
           className="w-full bg-crisis-safe/20 hover:bg-crisis-safe/30 text-crisis-safe border border-crisis-safe/50"
           variant="outline"

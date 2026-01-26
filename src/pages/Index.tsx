@@ -51,10 +51,12 @@ const clusterDataMap: Record<string, { location: string; block: string; severity
 };
 
 export default function Index() {
-  const [clusters] = useState(initialClusters);
+  const [clusters, setClusters] = useState(initialClusters);
   const [signals, setSignals] = useState<Signal[]>(initialSignals);
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSOSActive, setIsSOSActive] = useState(false);
+  const [isPowerCrisis, setIsPowerCrisis] = useState(false);
   const [layers, setLayers] = useState({
     satellite: true,
     smsReports: true,
@@ -82,7 +84,7 @@ export default function Index() {
   const handleSimulateReport = useCallback(() => {
     const types: Signal["type"][] = ["DIRTY", "BROKEN", "OUTAGE", "RESTORED"];
     const sources: Signal["source"][] = ["SMS", "SENSOR", "SATELLITE", "FIELD"];
-    
+
     const newSignal: Signal = {
       id: Date.now().toString(),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
@@ -95,6 +97,25 @@ export default function Index() {
     toast.success("New report received", {
       description: `${newSignal.type} at ${newSignal.location}`,
     });
+  }, []);
+
+  const handleTriggerPowerCrisis = useCallback(() => {
+    setClusters(prev => prev.map(c =>
+      c.id === "3" ? { ...c, status: "critical" as const } : c
+    ));
+    setIsPowerCrisis(true);
+    toast.error("CONFIRMED CRISIS", {
+      description: "Satellite corroboration: Al-Riyadh Block 4 power outage verified.",
+    });
+  }, []);
+
+  const handleTriggerSOS = useCallback(() => {
+    setIsSOSActive(true);
+    toast.error("HUMANITARIAN SOS RECEIVED", {
+      description: "Immediate action required for Water Contamination.",
+    });
+    // Auto-clear SOS after 10 seconds for demo reset
+    setTimeout(() => setIsSOSActive(false), 10000);
   }, []);
 
   const handleDispatchElectrical = useCallback(() => {
@@ -110,12 +131,22 @@ export default function Index() {
   }, []);
 
   const selectedClusterData = selectedCluster ? clusterDataMap[selectedCluster] || null : null;
-  const confidenceScore = selectedCluster === "1" ? 92 : selectedCluster === "2" ? 87 : 65;
+  const confidenceScore = isPowerCrisis && selectedCluster === "3" ? 96 : selectedCluster === "1" ? 92 : selectedCluster === "2" ? 87 : 65;
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-screen flex flex-col bg-background overflow-hidden relative">
+      {/* SOS Siren Overlay */}
+      {isSOSActive && (
+        <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center bg-red-500/10 animate-pulse border-[20px] border-red-600/30">
+          <div className="bg-red-600 text-white p-8 rounded-full shadow-2xl animate-bounce flex flex-col items-center gap-4">
+            <span className="text-6xl font-black">SOS</span>
+            <span className="text-xl font-bold uppercase tracking-widest">Humanitarian Emergency</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <DashboardHeader 
+      <DashboardHeader
         criticalCount={criticalCount}
         warningCount={warningCount}
         safeCount={safeCount}
@@ -125,7 +156,7 @@ export default function Index() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar - Live Signals */}
         <aside className="w-80 flex-shrink-0">
-          <LiveSignalsFeed 
+          <LiveSignalsFeed
             signals={signals}
             onSimulate={handleSimulateReport}
           />
@@ -133,7 +164,7 @@ export default function Index() {
 
         {/* Map Area */}
         <main className="flex-1 relative">
-          <MapPlaceholder 
+          <MapPlaceholder
             clusters={clusters}
             selectedCluster={selectedCluster}
             onClusterClick={handleClusterClick}
@@ -142,7 +173,7 @@ export default function Index() {
 
           {/* Layer Control - Bottom Left */}
           <div className="absolute bottom-20 left-4 z-20">
-            <LayerControl 
+            <LayerControl
               layers={layers}
               onToggle={handleLayerToggle}
             />
@@ -150,7 +181,7 @@ export default function Index() {
 
           {/* Fusion Engine Widget - Top Right */}
           <div className="absolute top-4 right-4 z-20">
-            <FusionEngineWidget 
+            <FusionEngineWidget
               isActive={selectedCluster !== null && clusters.find(c => c.id === selectedCluster)?.status === "critical"}
               confidenceScore={confidenceScore}
               clusterLabel={clusters.find(c => c.id === selectedCluster)?.label}
@@ -160,13 +191,29 @@ export default function Index() {
       </div>
 
       {/* Action Modal */}
-      <ActionModal 
+      <ActionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         clusterData={selectedClusterData}
         onDispatchElectrical={handleDispatchElectrical}
         onDispatchWater={handleDispatchWater}
       />
+
+      {/* Hidden Demo Controls */}
+      <div className="absolute bottom-4 right-4 z-50 flex gap-2 opacity-5 hover:opacity-100 transition-opacity">
+        <button
+          onClick={handleTriggerPowerCrisis}
+          className="bg-orange-600 text-[8px] p-1 rounded text-white"
+        >
+          [DEMO] Crisis Lock
+        </button>
+        <button
+          onClick={handleTriggerSOS}
+          className="bg-red-600 text-[8px] p-1 rounded text-white"
+        >
+          [DEMO] SOS Signal
+        </button>
+      </div>
     </div>
   );
 }
