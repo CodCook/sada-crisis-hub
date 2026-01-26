@@ -64,6 +64,25 @@ Backend Simulator: `http://localhost:8001`
 2. **Crisis Verification**: Trigger the `[DEMO] Crisis Lock` to see the Fusion Engine verify a 96% confidence failure via satellite.
 3. **Emergency Dispatch**: Use the Action Modal to dispatch Water or Electrical teams to the verified cluster.
 
+## ☁️ Deployment (Render)
+
+To deploy the full SADA Hub on **Render**, follow these steps:
+
+### 1. Backend (Python Web Service)
+- **Repo Root**: Connect your GitHub.
+- **Environment**: `Python`
+- **Root Directory**: `sms-backend`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn backend:app --host 0.0.0.0 --port $PORT`
+- **Note**: Copy your service URL (e.g., `https://my-backend.onrender.com`) for the next step.
+
+### 2. Frontend (Static Site)
+- **Repo Root**: Connect your GitHub (same repo).
+- **Build Command**: `npm i && npm run build`
+- **Publish Directory**: `dist`
+- **Environment Variables**:
+  - Add `VITE_BACKEND_URL` = `https://your-backend-url-from-step-1.onrender.com`
+
 ---
 
 *Impact Metric: Reduction in time spent by residents searching for water through real-time map updates.*

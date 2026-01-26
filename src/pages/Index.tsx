@@ -65,9 +65,11 @@ export default function Index() {
 
   // Global Sync: Poll backend for new messages every 5 seconds
   useEffect(() => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+
     const fetchMessages = async () => {
       try {
-        const res = await fetch("http://localhost:8001/messages?limit=20");
+        const res = await fetch(`${backendUrl}/messages?limit=20`);
         if (!res.ok) return;
         const data = await res.json();
         const enriched = data.map((msg: any, idx: number) => ({
