@@ -104,15 +104,15 @@ export default function Index() {
       c.id === "3" ? { ...c, status: "critical" as const } : c
     ));
     setIsPowerCrisis(true);
-    toast.error("CONFIRMED CRISIS", {
-      description: "Satellite corroboration: Al-Riyadh Block 4 power outage verified.",
+    toast.error("INFRASTRUCTURE CRISIS VERIFIED", {
+      description: "Confidence Score: 96% | Satellite Layer: Zero-Lumen Zone Detected.",
     });
   }, []);
 
   const handleTriggerSOS = useCallback(() => {
     setIsSOSActive(true);
-    toast.error("HUMANITARIAN SOS RECEIVED", {
-      description: "Immediate action required for Water Contamination.",
+    toast.error("HUMANITARIAN ALERT: UNICEF", {
+      description: "Bypassing validation filter. Immediate action for Water Contamination.",
     });
     // Auto-clear SOS after 10 seconds for demo reset
     setTimeout(() => setIsSOSActive(false), 10000);

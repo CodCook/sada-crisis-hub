@@ -42,14 +42,14 @@ export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSig
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await fetch("http://localhost:8000/messages?limit=20");
+        const res = await fetch("http://localhost:8001/messages?limit=20");
         if (!res.ok) return;
         const data = await res.json();
         const enriched = data.map((msg: any, idx: number) => ({
-          id: msg.timestamp + idx,
+          id: msg.timestamp + (msg.from || "unknown") + idx,
           time: new Date(msg.timestamp).toLocaleTimeString(),
           type: msg.signal_type as any,
-          location: msg.body?.includes("#BROKEN") ? "Al-Riyadh Block 4" : "Unknown",
+          location: msg.location || "Unknown Sector",
           source: msg.from === "demo" ? "FIELD" : "SMS",
           body: msg.body,
           priority: msg.priority,
@@ -57,7 +57,16 @@ export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSig
         }));
         setSignals((prev) => {
           const existing = new Set(prev.map((s) => s.id));
-          const newMsgs = enriched.filter((m) => !existing.has(m.id));
+          const newMsgs = enriched.filter((m: any) => !existing.has(m.id));
+          if (newMsgs.length === 0) return prev;
+
+          // Trigger toast for new reports if they are urgent
+          newMsgs.forEach((m: any) => {
+            if (m.type === "SOS" || m.priority > 90) {
+              console.log("URGENT SIGNAL RECEIVED:", m);
+            }
+          });
+
           return [...newMsgs, ...prev].slice(0, 50);
         });
       } catch (e) {
@@ -91,7 +100,10 @@ export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSig
           {signals.map((signal) => (
             <div
               key={signal.id}
-              className="signal-item p-3 rounded-lg bg-surface-elevated border border-border hover:border-muted-foreground/5 transition-colors cursor-pointer"
+              className={`signal-item p-3 rounded-lg border transition-all cursor-pointer ${signal.type === "SOS"
+                  ? "bg-crisis-critical/10 border-crisis-critical shadow-[0_0_15px_rgba(234,56,76,0.2)] animate-pulse"
+                  : "bg-surface-elevated border-border hover:border-muted-foreground/5 shadow-sm"
+                }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="text-xs font-mono text-muted-foreground">
@@ -99,21 +111,24 @@ export function LiveSignalsFeed({ signals: initialSignals, onSimulate }: LiveSig
                 </span>
                 <Badge
                   variant="outline"
-                  className={`text-[10px] px-1.5 py-0 ${typeBadgeStyles[signal.type]}`}
+                  className={`text-[10px] px-1.5 py-0 font-bold ${signal.type === "SOS" ? "bg-crisis-critical text-white" : typeBadgeStyles[signal.type]
+                    }`}
                 >
                   #{signal.type}
                 </Badge>
               </div>
 
               <div className="mt-2 flex items-center gap-2">
-                {signal.type === "DIRTY" || signal.type === "BROKEN" ? (
+                {signal.type === "SOS" ? (
+                  <AlertTriangle className="w-4 h-4 text-crisis-critical animate-bounce" />
+                ) : signal.type === "DIRTY" || signal.type === "BROKEN" ? (
                   <AlertTriangle className="w-3.5 h-3.5 text-crisis-warning" />
                 ) : signal.type === "RESTORED" ? (
                   <Droplet className="w-3.5 h-3.5 text-crisis-safe" />
                 ) : (
                   <AlertTriangle className="w-3.5 h-3.5 text-crisis-critical" />
                 )}
-                <span className="text-sm font-medium text-foreground">
+                <span className={`text-sm font-medium ${signal.type === "SOS" ? "text-crisis-critical font-bold" : "text-foreground"}`}>
                   {signal.location}
                 </span>
               </div>
