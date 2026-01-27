@@ -77,11 +77,8 @@ To deploy the full SADA Hub on **Render**, follow these steps:
 - **Note**: Copy your service URL (e.g., `https://my-backend.onrender.com`) for the next step.
 
 ### 2. Frontend (Static Site)
-- **Repo Root**: Connect your GitHub (same repo).
 - **Build Command**: `npm i && npm run build`
 - **Publish Directory**: `dist`
-- **Environment Variables**:
-  - Add `VITE_BACKEND_URL` = `https://your-backend-url-from-step-1.onrender.com`
 
 ---
 
