@@ -65,7 +65,10 @@ export default function Index() {
 
   // Global Sync: Poll backend for new messages every 5 seconds
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+    let backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
+    if (backendUrl && !backendUrl.startsWith("http")) {
+      backendUrl = `https://${backendUrl}`;
+    }
 
     const fetchMessages = async () => {
       try {

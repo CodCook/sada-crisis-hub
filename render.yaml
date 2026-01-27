@@ -21,7 +21,7 @@ services:
         fromService:
           type: web
           name: sada-crisis-hub-backend
-          property: url
+          property: host
     headers:
       - path: /*
         name: Cache-Control
