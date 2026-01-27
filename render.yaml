@@ -1,0 +1,32 @@
+services:
+  # Backend Service
+  - type: web
+    name: sada-crisis-hub-backend
+    env: python
+    rootDir: sms-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+  # Frontend Static Site
+  - type: static
+    name: sada-crisis-hub-frontend
+    env: static
+    buildSpec:
+      buildCommand: npm install && npm run build
+      publishDir: dist
+    envVars:
+      - key: VITE_BACKEND_URL
+        fromService:
+          type: web
+          name: sada-crisis-hub-backend
+          property: url
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    rewriteRules:
+      - source: /*
+        destination: /index.html
