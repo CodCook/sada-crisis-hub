@@ -11,12 +11,11 @@ services:
         value: 3.11.0
 
   # Frontend Static Site
-  - type: static
+  - type: web
     name: sada-crisis-hub-frontend
     env: static
-    buildSpec:
-      buildCommand: npm install && npm run build
-      publishDir: dist
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_BACKEND_URL
         fromService:
@@ -27,6 +26,7 @@ services:
       - path: /*
         name: Cache-Control
         value: no-cache
-    rewriteRules:
-      - source: /*
+    routes:
+      - type: rewrite
+        source: /*
         destination: /index.html
