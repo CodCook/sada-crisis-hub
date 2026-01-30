@@ -2,10 +2,11 @@ import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { LiveSignalsFeed, Signal } from "@/components/dashboard/LiveSignalsFeed";
-import { LeafletMap } from "@/components/dashboard/LeafletMap";
+import { OpenInfraMap } from "@/components/dashboard/OpenInfraMap";
 import { LayerControl } from "@/components/dashboard/LayerControl";
 import { FusionEngineWidget } from "@/components/dashboard/FusionEngineWidget";
 import { ActionModal } from "@/components/dashboard/ActionModal";
+import { IndicatorPanel } from "@/components/dashboard/IndicatorPanel";
 
 // Initial cluster data - positioned relative to Khartoum geography
 // The Y-shape confluence: Blue Nile (east) + White Nile (west) meeting at center
@@ -21,14 +22,22 @@ const initialClusters = [
 ];
 
 // Initial signals - Khartoum locations
-const initialSignals: Signal[] = [
-  { id: "1", time: "10:42 AM", type: "BROKEN", location: "Bahri Central", coords: [15.60, 32.53], source: "SMS" },
-  { id: "2", time: "10:38 AM", type: "DIRTY", location: "Omdurman Souq", coords: [15.64, 32.48], source: "SENSOR" },
-  { id: "3", time: "10:35 AM", type: "OUTAGE", location: "Omdurman West", coords: [15.65, 32.45], source: "SATELLITE" },
-  { id: "4", time: "10:30 AM", type: "RESTORED", location: "Al-Riyadh Block 4", coords: [15.55, 32.55], source: "FIELD" },
-  { id: "5", time: "10:25 AM", type: "BROKEN", location: "Khartoum Central", coords: [15.58, 32.53], source: "SMS" },
-  { id: "6", time: "10:20 AM", type: "DIRTY", location: "Karari Sector", coords: [15.68, 32.47], source: "SMS" },
-];
+// Initial signals - Khartoum locations
+// Initial signals - Empty for real-time mode
+const initialSignals: Signal[] = [];
+
+interface Event {
+  id: string;
+  title: string;
+  type: string;
+  severity: string;
+  confidence: number;
+  location: string;
+  coords: [number, number];
+  proxy_details: Record<string, number>;
+  status: string;
+  timestamp: string;
+}
 
 // Sample locations for simulation - Khartoum neighborhoods
 const sampleLocations = [
@@ -53,6 +62,8 @@ const clusterDataMap: Record<string, { location: string; block: string; severity
 export default function Index() {
   const [clusters, setClusters] = useState(initialClusters);
   const [signals, setSignals] = useState<Signal[]>(initialSignals);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSOSActive, setIsSOSActive] = useState(false);
@@ -61,53 +72,41 @@ export default function Index() {
     satellite: true,
     smsReports: true,
     waterPipelines: true,
+    electricity: true, // Power lines/substations
+    powerPlants: true, // Plants/Generators/Solar
+    telecoms: true,    // Comms lines/masts
+    petroleum: true,   // Oil pipelines/wells
   });
 
-  // Global Sync: Poll backend for new messages every 5 seconds
+  // Global Sync: Poll backend for new signals and events
   useEffect(() => {
     let backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
     if (backendUrl && !backendUrl.startsWith("http")) {
-      backendUrl = `https://${backendUrl}`;
+      backendUrl = `http://${backendUrl}`;
     }
 
-    const fetchMessages = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch(`${backendUrl}/messages?limit=20`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const enriched = data.map((msg: any, idx: number) => ({
-          id: msg.id || (msg.timestamp + idx),
-          time: new Date(msg.timestamp).toLocaleTimeString(),
-          type: msg.signal_type as any,
-          location: msg.location || "Unknown Sector",
-          coords: msg.coords || [15.58, 32.53],
-          source: msg.from === "demo" ? "FIELD" : "SMS",
-          body: msg.body,
-          priority: msg.priority,
-          action: msg.action,
-        }));
-        setSignals((prev) => {
-          const existing = new Set(prev.map((s) => s.id));
-          const newMsgs = enriched.filter((m: any) => !existing.has(m.id));
-          if (newMsgs.length === 0) return prev;
+        // Fetch signals
+        const resSignals = await fetch(`${backendUrl}/signals`);
+        if (resSignals.ok) {
+          const signalData = await resSignals.json();
+          setSignals(signalData);
+        }
 
-          // Trigger toast for new reports
-          newMsgs.forEach((m: any) => {
-            if (m.type === "SOS" || m.priority > 90) {
-              toast.error(`URGENT: ${m.type} at ${m.location}`, {
-                description: m.action
-              });
-            }
-          });
-
-          return [...newMsgs, ...prev].slice(0, 50);
-        });
+        // Fetch events
+        const resEvents = await fetch(`${backendUrl}/events`);
+        if (resEvents.ok) {
+          const eventData = await resEvents.json();
+          setEvents(eventData);
+        }
       } catch (e) {
         console.error("Polling error:", e);
       }
     };
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
+
+    fetchData();
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -129,24 +128,7 @@ export default function Index() {
     }
   }, [clusters]);
 
-  const handleSimulateReport = useCallback(() => {
-    const types: Signal["type"][] = ["DIRTY", "BROKEN", "OUTAGE", "RESTORED"];
-    const sources: Signal["source"][] = ["SMS", "SENSOR", "SATELLITE", "FIELD"];
 
-    const newSignal: Signal = {
-      id: Date.now().toString(),
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      type: types[Math.floor(Math.random() * types.length)],
-      location: sampleLocations[Math.floor(Math.random() * sampleLocations.length)],
-      coords: [15.58, 32.53], // Default static for simulation
-      source: sources[Math.floor(Math.random() * sources.length)],
-    };
-
-    setSignals(prev => [newSignal, ...prev].slice(0, 20));
-    toast.success("New report received", {
-      description: `${newSignal.type} at ${newSignal.location}`,
-    });
-  }, []);
 
   const handleTriggerPowerCrisis = useCallback(() => {
     setClusters(prev => prev.map(c =>
@@ -182,6 +164,18 @@ export default function Index() {
   const selectedClusterData = selectedCluster ? clusterDataMap[selectedCluster] || null : null;
   const confidenceScore = isPowerCrisis && selectedCluster === "3" ? 96 : selectedCluster === "1" ? 92 : selectedCluster === "2" ? 87 : 65;
 
+  const handleSignalClick = useCallback((signal: Signal) => {
+    // Attempt to find a verified event at this location
+    const matchedEvent = events.find(e => e.location === signal.location);
+    if (matchedEvent) {
+      setSelectedEvent(matchedEvent);
+    } else {
+      toast.info("Unverified Signal", {
+        description: "No corroborated event generated for this signal yet. Intelligence Engine waiting for secondary confirmation.",
+      });
+    }
+  }, [events]);
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
       {/* SOS Siren Overlay */}
@@ -207,18 +201,18 @@ export default function Index() {
         <aside className="w-80 flex-shrink-0">
           <LiveSignalsFeed
             signals={signals}
-            onSimulate={handleSimulateReport}
+            onSignalClick={handleSignalClick}
           />
         </aside>
 
         {/* Map Area */}
         <main className="flex-1 relative">
-          <LeafletMap
-            signals={signals}
-            clusters={clusters}
-            selectedCluster={selectedCluster}
-            onClusterClick={handleClusterClick}
+          <OpenInfraMap
+            className="w-full h-full"
             layers={layers}
+            signals={signals}
+            events={events}
+            onEventClick={setSelectedEvent}
           />
 
           {/* Layer Control - Bottom Left */}
@@ -239,6 +233,9 @@ export default function Index() {
           </div>
         </main>
       </div>
+
+      {/* Indicator Panel - Right Side */}
+      <IndicatorPanel event={selectedEvent} onClose={() => setSelectedEvent(null)} />
 
       {/* Action Modal */}
       <ActionModal

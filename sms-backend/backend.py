@@ -3,15 +3,45 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from twilio.twiml.messaging_response import MessagingResponse
 import uvicorn
-import random
-import asyncio
-from datetime import datetime
-import re
 import uuid
+from datetime import datetime
 
-# In-memory store for received SMS reports
-message_store: list[dict] = []
+# Import modular services
+from models import Signal
+from services.intelligence import IntelligenceEngine
+from services.mock_data import MockDataGenerator
 
+import os
+from twilio.rest import Client
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Twilio Config
+# Twilio Config
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_API_KEY = os.getenv("TWILIO_API_KEY")
+TWILIO_API_SECRET = os.getenv("TWILIO_API_SECRET")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+TWILIO_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+
+twilio_client = None
+
+# Initialize Twilio Client
+if TWILIO_ACCOUNT_SID:
+    try:
+        if TWILIO_API_KEY and TWILIO_API_SECRET:
+             # Use API Key Authentication
+             twilio_client = Client(TWILIO_API_KEY, TWILIO_API_SECRET, TWILIO_ACCOUNT_SID)
+             print("Twilio Client Initialized (API Key)")
+        elif TWILIO_AUTH_TOKEN:
+             # Use Auth Token Authentication
+             twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+             print("Twilio Client Initialized (Auth Token)")
+    except Exception as e:
+        print(f"Twilio Init Failed: {e}")
 app = FastAPI()
 
 # Add CORS middleware
@@ -23,8 +53,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- SMS Simulator UI ---
+# Initialize Services
+engine = IntelligenceEngine()
+mock_gen = MockDataGenerator()
 
+# --- Autonomous Monitoring & Verification Logic ---
+import asyncio
+from fastapi import BackgroundTasks
+
+async def simulate_verification(location: str, coords: list[float]):
+    """
+    Simulates a targeted satellite/sensor sweep triggered by a human report.
+    Delays for effect, then generates corroborating data.
+    """
+    await asyncio.sleep(5) # Wait 5 seconds to simulate satellite tasking
+    
+    # 1. Check Nightlights (VIIRS)
+    sat_signal = mock_gen.generate_satellite_nightlight(location, coords)
+    engine.ingest_signal(sat_signal)
+    
+    # 2. Check Infrastructure Status (Grid)
+    grid_signal = mock_gen.generate_grid_status(location, coords)
+    engine.ingest_signal(grid_signal)
+
+async def autonomous_monitoring_loop():
+    """
+    Background process that runs indefinitely to simulate the system
+    finding issues on its own without human reports.
+    """
+    while True:
+        await asyncio.sleep(20) # Sweep every 20 seconds
+        
+        # Pick a random location to "scan"
+        loc_key = random.choice(list(LOCATIONS.keys()))
+        loc_data = LOCATIONS[loc_key]
+        
+        # Randomly decide to check different indicators
+        check_type = random.choice(["wapor", "viirs", "aquastat"])
+        
+        if check_type == "wapor":
+            sig = mock_gen.generate_soil_moisture(loc_data["name"], loc_data["coords"])
+        elif check_type == "viirs":
+            sig = mock_gen.generate_satellite_nightlight(loc_data["name"], loc_data["coords"])
+        else:
+            sig = mock_gen.generate_aquastat_update(loc_data["name"], loc_data["coords"])
+            
+        # Only ingest if it's actually an anomaly (value check) to reduce noise?
+        # The generators randomize anomalies. We'll ingest everything, 
+        # but the frontend only cares about what's pushed to the feed/map.
+        engine.ingest_signal(sig)
+
+@app.on_event("startup")
+async def startup_event():
+    # Start the autonomous loop in the background
+    asyncio.create_task(autonomous_monitoring_loop())
+
+# --- SMS Simulator UI ---
 @app.get("/", response_class=HTMLResponse)
 async def simulator():
     return """
@@ -97,22 +181,27 @@ async def simulator():
 
         <!-- Action Bar (Presets) -->
         <div class="bg-telegram-header/50 px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar border-t border-white/5">
-            <button onclick="sendDirect('#BROKEN Al-Riyadh Block 4')" class="bg-[#17212b] border border-[#2b5278] text-[#5288c1] text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-[#2b5278]/20 transition-colors">REPORT: #BROKEN RIYADH</button>
-            <button onclick="sendDirect('#SOS Khartoum West')" class="bg-[#17212b] border border-red-500/30 text-red-500 text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-red-500/10 transition-colors">URGENT: #SOS KHARTOUM</button>
-            <button onclick="sendDirect('#DIRTY Omdurman Souq')" class="bg-[#17212b] border border-[#2b5278] text-[#5288c1] text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-[#2b5278]/20 transition-colors">REPORT: #DIRTY OMDURMAN</button>
+            <button onclick="sendDirect('#POWER Khartoum Central')" class="bg-[#17212b] border border-[#2b5278] text-[#5288c1] text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-[#2b5278]/20 transition-colors">REPORT: #POWER KHARTOUM</button>
+            <button onclick="sendDirect('#AID Omdurman Souq')" class="bg-[#17212b] border border-red-500/30 text-red-500 text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-red-500/10 transition-colors">URGENT: #AID OMDURMAN</button>
+            <button onclick="sendDirect('#WATER Bahri Central')" class="bg-[#17212b] border border-[#2b5278] text-[#5288c1] text-[11px] font-bold px-3 py-1.5 rounded-full whitespace-nowrap hover:bg-[#2b5278]/20 transition-colors">REPORT: #WATER BAHRI</button>
         </div>
 
-        <!-- Input Area -->
         <div class="bg-telegram-header p-3 flex items-center gap-3">
-            <button class="text-zinc-500 hover:text-telegram-accent transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </button>
-            <div class="flex-1 bg-[#242f3d] rounded-xl flex items-center px-4 py-2 border border-transparent focus-within:border-telegram-accent transition-all">
-                <input id="sms-input" type="text" placeholder="Message" 
-                    class="bg-transparent border-none text-sm w-full focus:outline-none placeholder:text-zinc-500">
-                <button class="text-zinc-500 hover:text-telegram-accent">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+            <div class="relative group">
+                <button class="text-zinc-500 hover:text-telegram-accent transition-colors p-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 </button>
+                <div class="absolute bottom-full left-0 mb-2 w-48 bg-[#17212b] rounded-lg shadow-xl border border-white/5 hidden group-hover:block p-1">
+                    <button onclick="setLocation('KHARTOUM')" class="w-full text-left px-3 py-2 text-sm hover:bg-[#2b5278] rounded">📍 Khartoum Central</button>
+                    <button onclick="setLocation('OMDURMAN')" class="w-full text-left px-3 py-2 text-sm hover:bg-[#2b5278] rounded">📍 Omdurman Souq</button>
+                    <button onclick="setLocation('BAHRI')" class="w-full text-left px-3 py-2 text-sm hover:bg-[#2b5278] rounded">📍 Bahri North</button>
+                    <button onclick="setLocation('KARARI')" class="w-full text-left px-3 py-2 text-sm hover:bg-[#2b5278] rounded">📍 Karari Sector</button>
+                </div>
+            </div>
+            
+            <div class="flex-1 bg-[#242f3d] rounded-xl flex items-center px-4 py-2 border border-transparent focus-within:border-telegram-accent transition-all">
+                <input id="sms-input" type="text" placeholder="Message (#AID...)" 
+                    class="bg-transparent border-none text-sm w-full focus:outline-none placeholder:text-zinc-500">
             </div>
             <button onclick="sendCustom()" class="bg-[#242f3d] w-10 h-10 rounded-full flex items-center justify-center text-telegram-accent hover:bg-telegram-accent hover:text-white transition-all transform active:scale-95 shadow-lg">
                 <svg class="w-5 h-5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7l9 5-9 5V7z"></path></svg>
@@ -120,6 +209,17 @@ async def simulator():
         </div>
 
         <script>
+            let currentLocation = "KHARTOUM"; // Default
+            
+            function setLocation(loc) {
+                currentLocation = loc;
+                const input = document.getElementById('sms-input');
+                if (!input.value.includes(loc)) {
+                    input.value = input.value + " " + loc;
+                }
+                input.focus();
+            }
+
             async function sendDirect(body) {
                 if (!body) return;
 
@@ -163,7 +263,11 @@ async def simulator():
 # --- SADA Core Logic ---
 
 LOCATIONS = {
-    # Al-Riyadh
+    # Khartoum
+    "KHARTOUM": {"name": "Khartoum Central", "coords": [15.589, 32.535]},
+    "BURRI": {"name": "Burri District", "coords": [15.575, 32.560]},
+    "KALAKLA": {"name": "Kalakla South", "coords": [15.480, 32.510]},
+    "JABRA": {"name": "Jabra Industrial", "coords": [15.520, 32.530]},
     "RIYADH": {"name": "Al-Riyadh Block 4", "coords": [15.556, 32.553]},
     # Omdurman
     "OMDURMAN": {"name": "Omdurman Central", "coords": [15.642, 32.482]},
@@ -174,130 +278,242 @@ LOCATIONS = {
     "BAHRI": {"name": "Bahri North", "coords": [15.620, 32.540]},
     "BAHRI CENTRAL": {"name": "Bahri Central", "coords": [15.600, 32.530]},
     "SHAMBAT": {"name": "Shambat Area", "coords": [15.625, 32.525]},
-    # Khartoum
-    "KHARTOUM": {"name": "Khartoum Central", "coords": [15.589, 32.535]},
-    "BURRI": {"name": "Burri District", "coords": [15.575, 32.560]},
-    "KALAKLA": {"name": "Kalakla South", "coords": [15.480, 32.510]},
-    "JABRA": {"name": "Jabra Industrial", "coords": [15.520, 32.530]},
 }
 
 def extract_location(text: str) -> dict:
     text = text.upper()
-    # Sort keys by length descending to match more specific strings first
     sorted_keys = sorted(LOCATIONS.keys(), key=len, reverse=True)
     for key in sorted_keys:
         if key in text:
             return LOCATIONS[key]
-    return {"name": "Unknown Sector", "coords": [15.58, 32.53]} # Default to central Khartoum
-
-def calculate_priority(satellite_score: int, reports_count: int, infrastructure_score: int, is_sos: bool = False) -> float:
-    if is_sos: return 100.0
-    report_score = min(reports_count * 10, 100)
-    priority = (0.3 * satellite_score) + (0.5 * report_score) + (0.2 * infrastructure_score)
-    return round(priority, 2)
-
-def get_proxy_data():
-    return random.randint(0, 100), random.randint(0, 100)
-
-def determine_action(priority_score: float, signal_type: str):
-    if signal_type == "SOS":
-         return "HUMANITARIAN ALERT: Dispatch UNICEF immediately."
-    if priority_score >= 80:
-        return "CRITICAL ALERT: Dispatch Immediate Response Team."
-    elif priority_score >= 50:
-         return "WARNING: Flag for verification."
-    else:
-        return "LOW PRIORITY: Logged for monitoring."
+    return {"name": "Unknown Sector", "coords": [15.58, 32.53]}
 
 # --- API Endpoints ---
 
 @app.post("/reciveSms")
-async def getsms(request: Request):
+async def getsms(request: Request, background_tasks: BackgroundTasks):
+    print("--- DEBUG: Incoming SMS Request Received ---")
     form_data = await request.form()
     message_dict = dict(form_data)
+    print(f"--- DEBUG: Message Data: {message_dict} ---")
     
     body = message_dict.get('Body', '').strip().upper()
     from_number = message_dict.get('From', 'Personal Phone')
     
-    signal_type = "UNKNOWN"
-    if "#SOS" in body: signal_type = "SOS"
-    elif "#BROKEN" in body: signal_type = "BROKEN"
-    elif "#DIRTY" in body or "#WATER" in body: signal_type = "DIRTY"
+    # 1. Parse Signal
+    signal_type = "report"
+    report_type = "unknown"
+    
+    # Strict filtering based on Polished System Prompt
+    if "#AID" in body or "#SOS" in body: report_type = "AID"
+    elif "#POWER" in body or "#BROKEN" in body: report_type = "POWER"
+    elif "#WATER" in body or "#DIRTY" in body: report_type = "WATER"
+    else:
+        # If no valid tag found, we can either reject or mark as 'OTHER'
+        # For now, we'll mark as unknown but still log it, or we can choose to ignore.
+        report_type = "OTHER"
     
     loc_data = extract_location(body)
-    location = loc_data["name"]
-    coords = loc_data["coords"]
-    # Special case for the script: if it mentions Al-Riyadh
-    if "RIYADH" in body: 
-        location = LOCATIONS["RIYADH"]["name"]
-        coords = LOCATIONS["RIYADH"]["coords"]
-
-    satellite, infrastructure = get_proxy_data()
-    is_sos = (signal_type == "SOS")
-    priority = calculate_priority(satellite, 1, infrastructure, is_sos)
-    action = determine_action(priority, signal_type)
     
-    msg_entry = {
-        "id": str(uuid.uuid4()),
-        "body": body,
-        "from": from_number,
-        "timestamp": datetime.utcnow().isoformat(),
-        "signal_type": signal_type,
-        "location": location,
-        "coords": coords,
-        "priority": priority,
-        "action": action,
-    }
-    print(f"DEBUG: Received {signal_type} from {location} ({coords})")
-    message_store.append(msg_entry)
+    # Create Signal Object
+    new_signal = Signal(
+        type="report",
+        source="SADA_SMS",
+        location=loc_data["name"],
+        coords=loc_data["coords"],
+        value=100.0 if report_type == "SOS" else 50.0,
+        metadata={"raw_body": body, "report_type": report_type, "sender": from_number}
+    )
     
+    # 2. Ingest into Intelligence Engine
+    events = engine.ingest_signal(new_signal)
+    
+    # 3. Trigger Autonomous Verification (Simulation)
+    background_tasks.add_task(simulate_verification, loc_data["name"], loc_data["coords"])
+    
+    # 3. Respond
     resp = MessagingResponse()
-    resp.message(f"SADA: Signal '{signal_type}' received from {location}. Priority: {priority}.")
+    
+    # Check if this triggered an event immediately
+    active_events = [e for e in events if e.location == loc_data["name"]]
+    if active_events:
+        latest = active_events[-1]
+        reply_text = f"SADA: Verified {latest.severity} event in {latest.location}. Confidence: {int(latest.confidence * 100)}%."
+    else:
+        reply_text = f"SADA: Report received for {loc_data['name']}. Logged for verification."
+        
+    resp.message(reply_text)
+    resp.message(reply_text)
     return Response(content=str(resp), media_type="application/xml")
+
+@app.get("/messages")
+async def get_messages(limit: int = 50):
+    """
+    Returns recent signals specifically formatted for the frontend feed.
+    Prioritizes SMS reports and high-severity signals.
+    """
+    # Sort by timestamp desc (assuming simple append order for now)
+    recent = engine.signals[-limit:]
+    recent.reverse()
+    
+    # Map internal signal model to frontend expected props where needed
+    # (The frontend expects: timestamp, signal_type, location, coords, from/source, body)
+    results = []
+    for s in recent:
+        # Determine source label
+        src_label = s.source
+        if s.source == "SADA_SMS": src_label = "SMS"
+        
+        # Determine urgency/priority for frontend highlighting
+        priority = 0
+        if s.type == "SOS" or (s.metadata and s.metadata.get("urgency") == "high"):
+            priority = 100
+        
+        results.append({
+            "id": s.id,
+            "timestamp": s.timestamp,
+            "signal_type": s.metadata.get("report_type", s.type) if s.type == "report" else s.type,
+            "location": s.location,
+            "coords": s.coords,
+            "from": s.source,
+            "body": s.metadata.get("raw_body") or s.metadata.get("notes") or f"Detected {s.type} anomaly",
+            "priority": priority,
+            "action": s.metadata.get("status") or "Verify"
+        })
+        
+    return results
 
 @app.post("/demo")
 async def run_demo(type: str = "water", loc: str = ""):
     """
-    Simulates reports for the demo script.
+    Simulates signals for the demo.
     """
-    loc_data = LOCATIONS.get("SOUQ") # Default
-    if type.lower() == "sos":
-        signal_type = "SOS"
-        location = "Khartoum West"
-        coords = [15.55, 32.45]
-    elif type.lower() == "power":
-        signal_type = "BROKEN"
-        location = LOCATIONS["RIYADH"]["name"]
-        coords = LOCATIONS["RIYADH"]["coords"]
-    else:
-        signal_type = "DIRTY"
-        location = loc if loc else LOCATIONS["SOUQ"]["name"]
-        coords = LOCATIONS["SOUQ"]["coords"]
-    
-    satellite, infrastructure = get_proxy_data()
-    reports_count = 1 if type.lower() == "power" else 12 
-    
-    priority = calculate_priority(satellite, reports_count, infrastructure, signal_type == "SOS")
-    action = determine_action(priority, signal_type)
-    
-    msg_entry = {
-        "id": str(uuid.uuid4()),
-        "body": f"DEMO: {signal_type} SIGNAL",
-        "from": "demo",
-        "timestamp": datetime.utcnow().isoformat(),
-        "signal_type": signal_type,
-        "location": location,
-        "coords": coords,
-        "priority": priority,
-        "action": action,
-    }
-    print(f"DEBUG: Demo signal {signal_type} created for {location}")
-    message_store.append(msg_entry)
-    return {"status": "success", "message": msg_entry}
+    loc_key = "SOUQ"
+    if loc:
+        for k in LOCATIONS:
+            if k in loc.upper():
+                loc_key = k
+                break
+                
+    if type.lower() == "power":
+        # Simulate Nightlight Drop
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["RIYADH"])
+        sat_signal = mock_gen.generate_satellite_nightlight(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sat_signal)
+        return {"status": "injected", "signal": sat_signal, "current_events": events}
+        
+    elif type.lower() == "leak":
+        # Simulate Soil Moisture Spike
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["SOUQ"])
+        sensor_signal = mock_gen.generate_soil_moisture(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sensor_signal)
+        return {"status": "injected", "signal": sensor_signal, "current_events": events}
 
-@app.get("/messages")
-async def get_messages(limit: int = 20):
-    return message_store[-limit:][::-1]
+    # Add handlers for all other 9 indicators
+    elif type.lower() == "air":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["KARARI"])
+        sig = mock_gen.generate_air_quality(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+        
+    elif type.lower() == "market":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["OMDURMAN"])
+        sig = mock_gen.generate_market_price(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+        
+    elif type.lower() == "health":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["KALAKLA"])
+        sig = mock_gen.generate_health_alert(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+        
+    elif type.lower() == "mobility":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["SHAMBAT"])
+        sig = mock_gen.generate_displacement(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+        
+    elif type.lower() == "network":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["BAHRI"])
+        sig = mock_gen.generate_connectivity(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    elif type.lower() == "water":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["BURRI"])
+        sig = mock_gen.generate_water_quality(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    elif type.lower() == "security":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["JABRA"])
+        sig = mock_gen.generate_social_conflict(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    elif type.lower() == "aquastat":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["SHAMBAT"])
+        sig = mock_gen.generate_aquastat_update(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    elif type.lower() == "hdx":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["BAHRI"])
+        sig = mock_gen.generate_hdx_damage(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    elif type.lower() == "grid":
+        loc_data = LOCATIONS.get(loc_key, LOCATIONS["RIYADH"])
+        sig = mock_gen.generate_grid_status(loc_data["name"], loc_data["coords"])
+        events = engine.ingest_signal(sig)
+        return {"status": "injected", "signal": sig}
+
+    return {"status": "unknown_type"}
+
+@app.get("/events")
+async def get_events():
+    return engine.get_active_events()
+
+@app.get("/signals")
+async def get_signals():
+    return engine.signals
+
+@app.post("/verify_event/{event_id}")
+async def verify_event(event_id: str):
+    """
+    Endpoint for ERRs (Guardians) to manuall confirm an event.
+    """
+    for event in engine.events:
+        if event.id == event_id or str(event.id) == event_id: # Handle int/str mismatch
+             event.status = "verified"
+             event.confidence = min(event.confidence + 0.2, 1.0)
+             event.proxy_details["MANUAL_VERIFICATION"] = 1.0
+             
+             # Send Alert via Twilio if configured
+             # The recipient can be configured via ALERT_PHONE_NUMBER
+             alert_recipient = os.getenv("ALERT_PHONE_NUMBER", "+1234567890")
+             
+             if twilio_client:
+                 try:
+                     msg_body = f"SADA ALERT: Verified {event.severity} event in {event.location}. Deploying teams."
+                     kwargs = {"body": msg_body, "to": alert_recipient}
+                     
+                     if TWILIO_MESSAGING_SERVICE_SID and TWILIO_MESSAGING_SERVICE_SID.startswith("MG"):
+                         kwargs["messaging_service_sid"] = TWILIO_MESSAGING_SERVICE_SID
+                     elif TWILIO_PHONE_NUMBER:
+                         kwargs["from_"] = TWILIO_PHONE_NUMBER
+                         
+                     if "messaging_service_sid" in kwargs or "from_" in kwargs:
+                        twilio_client.messages.create(**kwargs)
+                     else:
+                        print("Twilio Config Error: No Phone Number or Messaging Service SID found.")
+                 except Exception as e:
+                     print(f"Failed to send SMS alert: {e}")
+                     
+             return {"status": "success", "event": event}
+    return {"status": "error", "message": "Event not found"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
