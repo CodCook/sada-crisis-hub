@@ -90,7 +90,9 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
       <ScrollArea className="flex-1 px-3">
         <div className="py-4 space-y-4">
           {signals.map((signal) => {
-            const isSms = signal.source === "SMS";
+            const isRealSms = signal.source === "REAL SMS";
+            const isSimulator = signal.source === "SIMULATOR";
+            const isAnySms = isRealSms || isSimulator;
             const isSOS = signal.type === "SOS" || signal.type === "AID";
 
             return (
@@ -101,7 +103,7 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
               >
                 {/* Source Label */}
                 <div className="flex items-center gap-1.5 px-1 mb-0.5">
-                  <span className={`text-[10px] uppercase tracking-wider font-bold ${sourceStyles[signal.source] || "text-muted-foreground"}`}>
+                  <span className={`text-[10px] uppercase tracking-wider font-bold ${sourceStyles[signal.source] || (isRealSms ? "text-[#5288c1]" : isSimulator ? "text-orange-400" : "text-muted-foreground")}`}>
                     {signal.source}
                   </span>
                   <div className="h-px flex-1 bg-border/30" />
@@ -114,10 +116,12 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
                 <div
                   className={`relative p-3 rounded-2xl border transition-all ${isSOS
                     ? "bg-crisis-critical/10 border-crisis-critical/50 shadow-[0_0_15px_rgba(234,56,76,0.15)]"
-                    : isSms
-                      ? "bg-[#2b5278]/40 border-[#5288c1]/30 shadow-sm" // Telegram-ish Blue for SMS
-                      : "bg-surface-elevated border-border" // Default for Proxy
-                    } ${isSms ? "rounded-tl-none ml-1" : "rounded-tr-none mr-1"} group-hover:border-primary/20`}
+                    : isRealSms
+                      ? "bg-[#2b5278]/40 border-[#5288c1]/30 shadow-sm" // Telegram-ish Blue for REAL SMS
+                      : isSimulator
+                        ? "bg-orange-500/10 border-orange-500/30" // Subtle Orange for Simulator
+                        : "bg-surface-elevated border-border" // Default for Proxy
+                    } ${isAnySms ? "rounded-tl-none ml-1" : "rounded-tr-none mr-1"} group-hover:border-primary/20`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex items-center gap-2">
@@ -125,28 +129,32 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
                         variant="outline"
                         className={`text-[9px] px-1.5 py-0 font-black h-4 ${isSOS
                           ? "bg-crisis-critical text-white border-none"
-                          : isSms
+                          : isRealSms
                             ? "bg-[#5288c1] text-white border-none"
-                            : typeBadgeStyles[signal.type]
+                            : isSimulator
+                              ? "bg-orange-500/80 text-white border-none"
+                              : typeBadgeStyles[signal.type]
                           }`}
                       >
                         {signal.type}
                       </Badge>
-                      <span className={`text-xs font-bold ${isSms ? "text-[#5288c1]" : "text-foreground"}`}>
+                      <span className={`text-xs font-bold ${isRealSms ? "text-[#5288c1]" : isSimulator ? "text-orange-400" : "text-foreground"}`}>
                         {signal.location}
                       </span>
                     </div>
                     {isSOS ? (
                       <AlertTriangle className="w-3.5 h-3.5 text-crisis-critical animate-pulse" />
-                    ) : isSms ? (
+                    ) : isRealSms ? (
                       <Radio className="w-3 h-3 text-[#5288c1]/70" />
+                    ) : isSimulator ? (
+                      <Plus className="w-3 h-3 text-orange-400/70" />
                     ) : (
                       <Plus className="w-3 h-3 text-muted-foreground/50" />
                     )}
                   </div>
 
                   {/* Body Text (The message itself) */}
-                  <p className={`text-sm leading-relaxed font-medium ${isSms ? "text-white/90" : "text-foreground/90"}`}>
+                  <p className={`text-sm leading-relaxed font-medium ${isRealSms ? "text-white/90" : "text-foreground/90"}`}>
                     {signal.body}
                   </p>
 
@@ -157,10 +165,10 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
                   </div>
 
                   {/* Bubble Tail */}
-                  <div className={`absolute top-0 w-2 h-2 ${isSms
-                    ? "-left-1 border-l border-t border-[#5288c1]/20 bg-[#24374a] rotate-45"
+                  <div className={`absolute top-0 w-2 h-2 ${isAnySms
+                    ? "-left-1 border-l border-t border-border bg-surface-elevated rotate-45"
                     : "-right-1 border-r border-t border-border bg-surface-elevated rotate-45"
-                    } ${isSOS ? "bg-crisis-critical/10 border-crisis-critical/20" : ""}`}
+                    } ${isRealSms ? "bg-[#24374a] border-[#5288c1]/20" : isSimulator ? "bg-[#2a1f1a] border-orange-500/20" : ""} ${isSOS ? "bg-crisis-critical/10 border-crisis-critical/20" : ""}`}
                   />
                 </div>
               </div>

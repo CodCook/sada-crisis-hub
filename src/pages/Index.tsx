@@ -80,10 +80,7 @@ export default function Index() {
 
   // Global Sync: Poll backend for new signals and events
   useEffect(() => {
-    let backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
-    if (backendUrl && !backendUrl.startsWith("http")) {
-      backendUrl = `http://${backendUrl}`;
-    }
+    let backendUrl = ""; // Use relative paths for proxying via 8080
 
     const fetchData = async () => {
       try {
@@ -109,6 +106,24 @@ export default function Index() {
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleClear = async () => {
+    try {
+      const response = await fetch(`/clear`, { method: "POST" });
+      if (response.ok) {
+        setSignals([]);
+        setEvents([]);
+        toast.success("Dashboard Reset", {
+          description: "All signals and events have been cleared."
+        });
+      }
+    } catch (error) {
+      console.error("Clear failed:", error);
+      toast.error("Reset Failed", {
+        description: "Could not connect to backend to clear data."
+      });
+    }
+  };
 
   const criticalCount = clusters.filter(c => c.status === "critical").length;
   const warningCount = clusters.filter(c => c.status === "warning").length;
@@ -188,11 +203,11 @@ export default function Index() {
         </div>
       )}
 
-      {/* Header */}
       <DashboardHeader
         criticalCount={criticalCount}
         warningCount={warningCount}
         safeCount={safeCount}
+        onClear={handleClear}
       />
 
       {/* Main Content */}

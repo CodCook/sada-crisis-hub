@@ -298,13 +298,22 @@ def extract_location(text: str) -> dict:
 
 # --- API Endpoints ---
 
-async def handle_sms_signal(body: str, from_number: str, background_tasks: BackgroundTasks):
+async def handle_sms_signal(body: str, from_number: str, background_tasks: BackgroundTasks, source: str = "SADA_SMS"):
     """
     Centralized logic to process SADA SMS reports.
     Used by both the REST endpoint and the Pushbullet listener.
     """
     body = body.strip().upper()
-    print(f"--- SADA FUSION: Processing '{body}' from {from_number} ---")
+    
+    # ULTRA-LOUD LOGGING for REAL PHONE
+    if source == "REAL_SMS":
+        print("\n" + "!" * 60)
+        print(f"!!! RECEIVED MESSAGE FROM PERSONAL REAL PHONE !!!")
+        print(f"!!! SENDER: {from_number}")
+        print(f"!!! MESSAGE: {body}")
+        print("!" * 60 + "\n")
+    else:
+        print(f"--- [Simulator] Processing: {body} ---")
     
     # 1. Parse Signal
     report_type = "OTHER"
@@ -317,7 +326,7 @@ async def handle_sms_signal(body: str, from_number: str, background_tasks: Backg
     # Create Signal Object
     new_signal = Signal(
         type="report",
-        source="SADA_SMS",
+        source=source,
         location=loc_data["name"],
         coords=loc_data["coords"],
         value=100.0 if report_type == "SOS" else 50.0,
@@ -346,7 +355,7 @@ async def getsms(request: Request, background_tasks: BackgroundTasks):
     body = data.get('message', data.get('Body', '')).strip().upper()
     from_number = data.get('sender', data.get('From', 'Personal Phone'))
     
-    event_triggered = await handle_sms_signal(body, from_number, background_tasks)
+    event_triggered = await handle_sms_signal(body, from_number, background_tasks, source="SMS_SIMULATOR")
     return {"status": "received", "event_triggered": event_triggered}
 
 async def pushbullet_listener_loop():
@@ -361,36 +370,57 @@ async def pushbullet_listener_loop():
             asyncio.create_task(func(*args))
 
     uri = f"wss://stream.pushbullet.com/websocket/{PUSHBULLET_API_KEY}"
-    print(f"--- Pushbullet Listener: Connecting to {uri[:30]}... ---")
+    print(f"--- Pushbullet Listener: Connecting to {uri[:25]}... ---")
 
     while True:
         try:
-            async with websockets.connect(uri) as websocket:
-                print("--- Pushbullet Listener: CONNECTED ---")
+            # ping_interval=None disables pings to avoid timeout errors
+            async with websockets.connect(uri, ping_interval=None, ping_timeout=None) as websocket:
+                print("--- Pushbullet Listener: CONNECTION ESTABLISHED ---")
                 while True:
-                    message = await websocket.recv()
-                    data = json.loads(message)
+                    raw_msg = await websocket.recv()
+                    data = json.loads(raw_msg)
+                    
+                    if data.get('type') == 'nop':
+                        continue # Skip heartbeats to keep console clean
+                    
+                    # LOG EVERYTHING (RAW)
+                    print(f"\n--- [Pushbullet RAW] {raw_msg} ---")
                     
                     if data.get('type') == 'push':
-                        push_data = data.get('push', {})
+                        push = data.get('push', {})
+                        p_type = push.get('type', 'unknown')
                         
-                        # Case A: Actual SMS event (sms_changed)
-                        if push_data.get('type') == 'sms_changed':
-                            notifications = push_data.get('notifications', [])
-                            for notif in notifications:
-                                body = notif.get('body', '')
-                                sender = notif.get('title', 'Unknown')
-                                if '#' in body:
-                                    print(f"--- Pushbullet Listener: SMS Detected! '{body}' from {sender} ---")
-                                    await handle_sms_signal(body, sender, MockTasks())
+                        # 1. Broad Detection System
+                        msg_body = ""
+                        msg_title = "SADA Node"
                         
-                        # Case B: Standard mirrored notification (mirrored_push)
+                        if p_type == 'sms_changed':
+                            # SMS detection
+                            notifs = push.get('notifications', [])
+                            if notifs:
+                                msg_body = notifs[0].get('body', '')
+                                msg_title = notifs[0].get('title', 'SMS')
                         else:
-                            body = push_data.get('body', '')
-                            title = push_data.get('title', 'Notification')
-                            if '#' in body:
-                                print(f"--- Pushbullet Listener: Notification Detected! '{body}' ---")
-                                await handle_sms_signal(body, title, MockTasks())
+                            # Standard notification or link/note
+                            msg_body = push.get('body', '')
+                            msg_title = push.get('title', 'Notification')
+
+                        # 2. Urgent Fallback: If # tag exists anywhere in the push, we treat it as a signal
+                        if not msg_body and '#' in str(push):
+                            print("--- [Pushbullet] Tag detected in non-standard field! ---")
+                            # Extracting # tag via regex or simple search
+                            for tag in ["#POWER", "#WATER", "#AID", "#SOS", "#BROKEN", "#DIRTY"]:
+                                if tag in str(push).upper():
+                                    msg_body = tag
+                                    break
+                        
+                        # 3. Final Ingestion
+                        if msg_body:
+                            print(f"--- [Pushbullet] Extracted Signal: '{msg_body}' ---")
+                            await handle_sms_signal(msg_body, msg_title, MockTasks(), source="REAL_SMS")
+                        else:
+                            print(f"--- [Pushbullet] Push type '{p_type}' had no usable content ---")
         except Exception as e:
             print(f"--- Pushbullet Listener ERROR: {e}. Reconnecting in 5s... ---")
             await asyncio.sleep(5)
@@ -412,6 +442,8 @@ async def get_messages(limit: int = 50):
         # Determine source label
         src_label = s.source
         if s.source == "SADA_SMS": src_label = "SMS"
+        if s.source == "REAL_SMS": src_label = "REAL SMS"
+        if s.source == "SMS_SIMULATOR": src_label = "SIMULATOR"
         
         # Determine urgency/priority for frontend highlighting
         priority = 0
