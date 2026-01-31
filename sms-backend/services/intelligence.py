@@ -205,5 +205,10 @@ class IntelligenceEngine:
                 
         return self.events
     
+    def reset(self):
+        self.signals = []
+        self.events = []
+        self.active_clusters = {}
+
     def get_active_events(self):
         return [e for e in self.events if e.status != "resolved"]

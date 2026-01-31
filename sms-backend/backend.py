@@ -1,47 +1,29 @@
-from fastapi import FastAPI, Form, Response, Request
+from fastapi import FastAPI, Form, Response, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from twilio.twiml.messaging_response import MessagingResponse
 import uvicorn
 import uuid
 from datetime import datetime
+import random
+import os
+import asyncio
+import json
+import websockets
+import requests
+from dotenv import load_dotenv
 
 # Import modular services
 from models import Signal
 from services.intelligence import IntelligenceEngine
 from services.mock_data import MockDataGenerator
 
-import os
-from twilio.rest import Client
-from dotenv import load_dotenv
-
 # Load environment variables from .env file
 load_dotenv()
 
-# Twilio Config
-# Twilio Config
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_API_KEY = os.getenv("TWILIO_API_KEY")
-TWILIO_API_SECRET = os.getenv("TWILIO_API_SECRET")
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
-TWILIO_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+# Pushbullet Config
+PUSHBULLET_API_KEY = os.getenv("PUSHBULLET_API_KEY")
+PUSHBULLET_DEVICE_ID = os.getenv("PUSHBULLET_DEVICE_ID")
 
-twilio_client = None
-
-# Initialize Twilio Client
-if TWILIO_ACCOUNT_SID:
-    try:
-        if TWILIO_API_KEY and TWILIO_API_SECRET:
-             # Use API Key Authentication
-             twilio_client = Client(TWILIO_API_KEY, TWILIO_API_SECRET, TWILIO_ACCOUNT_SID)
-             print("Twilio Client Initialized (API Key)")
-        elif TWILIO_AUTH_TOKEN:
-             # Use Auth Token Authentication
-             twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-             print("Twilio Client Initialized (Auth Token)")
-    except Exception as e:
-        print(f"Twilio Init Failed: {e}")
 app = FastAPI()
 
 # Add CORS middleware
@@ -57,9 +39,32 @@ app.add_middleware(
 engine = IntelligenceEngine()
 mock_gen = MockDataGenerator()
 
+def send_sms_via_pushbullet(to: str, message: str):
+    if not PUSHBULLET_API_KEY or not PUSHBULLET_DEVICE_ID:
+        print("Pushbullet skipping: Missing API Key or Device ID")
+        return False
+    try:
+        url = "https://api.pushbullet.com/v2/texts"
+        headers = {"Access-Token": PUSHBULLET_API_KEY}
+        payload = {
+            "data": {
+                "addresses": [to],
+                "message": message,
+                "target_device_iden": PUSHBULLET_DEVICE_ID
+            }
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            print(f"Pushbullet SMS sent to {to}")
+            return True
+        else:
+            print(f"Pushbullet failed: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"Pushbullet error: {e}")
+        return False
+
 # --- Autonomous Monitoring & Verification Logic ---
-import asyncio
-from fastapi import BackgroundTasks
 
 async def simulate_verification(location: str, coords: list[float]):
     """
@@ -107,6 +112,9 @@ async def autonomous_monitoring_loop():
 async def startup_event():
     # Start the autonomous loop in the background
     asyncio.create_task(autonomous_monitoring_loop())
+    # Start Pushbullet listener if API key is present
+    if PUSHBULLET_API_KEY:
+        asyncio.create_task(pushbullet_listener_loop())
 
 # --- SMS Simulator UI ---
 @app.get("/", response_class=HTMLResponse)
@@ -290,28 +298,19 @@ def extract_location(text: str) -> dict:
 
 # --- API Endpoints ---
 
-@app.post("/reciveSms")
-async def getsms(request: Request, background_tasks: BackgroundTasks):
-    print("--- DEBUG: Incoming SMS Request Received ---")
-    form_data = await request.form()
-    message_dict = dict(form_data)
-    print(f"--- DEBUG: Message Data: {message_dict} ---")
-    
-    body = message_dict.get('Body', '').strip().upper()
-    from_number = message_dict.get('From', 'Personal Phone')
+async def handle_sms_signal(body: str, from_number: str, background_tasks: BackgroundTasks):
+    """
+    Centralized logic to process SADA SMS reports.
+    Used by both the REST endpoint and the Pushbullet listener.
+    """
+    body = body.strip().upper()
+    print(f"--- SADA FUSION: Processing '{body}' from {from_number} ---")
     
     # 1. Parse Signal
-    signal_type = "report"
-    report_type = "unknown"
-    
-    # Strict filtering based on Polished System Prompt
+    report_type = "OTHER"
     if "#AID" in body or "#SOS" in body: report_type = "AID"
     elif "#POWER" in body or "#BROKEN" in body: report_type = "POWER"
     elif "#WATER" in body or "#DIRTY" in body: report_type = "WATER"
-    else:
-        # If no valid tag found, we can either reject or mark as 'OTHER'
-        # For now, we'll mark as unknown but still log it, or we can choose to ignore.
-        report_type = "OTHER"
     
     loc_data = extract_location(body)
     
@@ -331,20 +330,70 @@ async def getsms(request: Request, background_tasks: BackgroundTasks):
     # 3. Trigger Autonomous Verification (Simulation)
     background_tasks.add_task(simulate_verification, loc_data["name"], loc_data["coords"])
     
-    # 3. Respond
-    resp = MessagingResponse()
-    
-    # Check if this triggered an event immediately
+    # Check if this triggered/updated an event
     active_events = [e for e in events if e.location == loc_data["name"]]
-    if active_events:
-        latest = active_events[-1]
-        reply_text = f"SADA: Verified {latest.severity} event in {latest.location}. Confidence: {int(latest.confidence * 100)}%."
-    else:
-        reply_text = f"SADA: Report received for {loc_data['name']}. Logged for verification."
+    return len(active_events) > 0
+
+@app.post("/reciveSms")
+async def getsms(request: Request, background_tasks: BackgroundTasks):
+    print("--- DEBUG: Incoming Webhook Request Received ---")
+    try:
+        data = await request.json()
+    except:
+        form_data = await request.form()
+        data = dict(form_data)
         
-    resp.message(reply_text)
-    resp.message(reply_text)
-    return Response(content=str(resp), media_type="application/xml")
+    body = data.get('message', data.get('Body', '')).strip().upper()
+    from_number = data.get('sender', data.get('From', 'Personal Phone'))
+    
+    event_triggered = await handle_sms_signal(body, from_number, background_tasks)
+    return {"status": "received", "event_triggered": event_triggered}
+
+async def pushbullet_listener_loop():
+    """
+    Listens to Pushbullet WebSocket for real-time notifications/SMS.
+    """
+    if not PUSHBULLET_API_KEY:
+        return
+
+    class MockTasks:
+        def add_task(self, func, *args):
+            asyncio.create_task(func(*args))
+
+    uri = f"wss://stream.pushbullet.com/websocket/{PUSHBULLET_API_KEY}"
+    print(f"--- Pushbullet Listener: Connecting to {uri[:30]}... ---")
+
+    while True:
+        try:
+            async with websockets.connect(uri) as websocket:
+                print("--- Pushbullet Listener: CONNECTED ---")
+                while True:
+                    message = await websocket.recv()
+                    data = json.loads(message)
+                    
+                    if data.get('type') == 'push':
+                        push_data = data.get('push', {})
+                        
+                        # Case A: Actual SMS event (sms_changed)
+                        if push_data.get('type') == 'sms_changed':
+                            notifications = push_data.get('notifications', [])
+                            for notif in notifications:
+                                body = notif.get('body', '')
+                                sender = notif.get('title', 'Unknown')
+                                if '#' in body:
+                                    print(f"--- Pushbullet Listener: SMS Detected! '{body}' from {sender} ---")
+                                    await handle_sms_signal(body, sender, MockTasks())
+                        
+                        # Case B: Standard mirrored notification (mirrored_push)
+                        else:
+                            body = push_data.get('body', '')
+                            title = push_data.get('title', 'Notification')
+                            if '#' in body:
+                                print(f"--- Pushbullet Listener: Notification Detected! '{body}' ---")
+                                await handle_sms_signal(body, title, MockTasks())
+        except Exception as e:
+            print(f"--- Pushbullet Listener ERROR: {e}. Reconnecting in 5s... ---")
+            await asyncio.sleep(5)
 
 @app.get("/messages")
 async def get_messages(limit: int = 50):
@@ -371,11 +420,11 @@ async def get_messages(limit: int = 50):
         
         results.append({
             "id": s.id,
-            "timestamp": s.timestamp,
-            "signal_type": s.metadata.get("report_type", s.type) if s.type == "report" else s.type,
+            "time": s.timestamp,
+            "type": s.metadata.get("report_type", s.type) if s.type == "report" else s.type,
             "location": s.location,
             "coords": s.coords,
-            "from": s.source,
+            "source": src_label,
             "body": s.metadata.get("raw_body") or s.metadata.get("notes") or f"Detected {s.type} anomaly",
             "priority": priority,
             "action": s.metadata.get("status") or "Verify"
@@ -491,29 +540,22 @@ async def verify_event(event_id: str):
              event.confidence = min(event.confidence + 0.2, 1.0)
              event.proxy_details["MANUAL_VERIFICATION"] = 1.0
              
-             # Send Alert via Twilio if configured
-             # The recipient can be configured via ALERT_PHONE_NUMBER
+             # Send Alert via Pushbullet if configured
              alert_recipient = os.getenv("ALERT_PHONE_NUMBER", "+1234567890")
-             
-             if twilio_client:
-                 try:
-                     msg_body = f"SADA ALERT: Verified {event.severity} event in {event.location}. Deploying teams."
-                     kwargs = {"body": msg_body, "to": alert_recipient}
-                     
-                     if TWILIO_MESSAGING_SERVICE_SID and TWILIO_MESSAGING_SERVICE_SID.startswith("MG"):
-                         kwargs["messaging_service_sid"] = TWILIO_MESSAGING_SERVICE_SID
-                     elif TWILIO_PHONE_NUMBER:
-                         kwargs["from_"] = TWILIO_PHONE_NUMBER
-                         
-                     if "messaging_service_sid" in kwargs or "from_" in kwargs:
-                        twilio_client.messages.create(**kwargs)
-                     else:
-                        print("Twilio Config Error: No Phone Number or Messaging Service SID found.")
-                 except Exception as e:
-                     print(f"Failed to send SMS alert: {e}")
-                     
+             msg_body = f"SADA ALERT: Verified {event.severity} event in {event.location}. Deploying teams."
+             send_sms_via_pushbullet(alert_recipient, msg_body)
+
+             # Manual verification complete
              return {"status": "success", "event": event}
     return {"status": "error", "message": "Event not found"}
+
+@app.post("/clear")
+async def clear_data():
+    """
+    Clears all signals and events from the engine.
+    """
+    engine.reset()
+    return {"status": "cleared"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)

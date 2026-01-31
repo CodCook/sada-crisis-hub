@@ -65,66 +65,107 @@ export function LiveSignalsFeed({ signals, onSignalClick }: LiveSignalsFeedProps
   return (
     <div className="h-full flex flex-col bg-sidebar border-r border-sidebar-border">
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Radio className="w-5 h-5 text-crisis-safe" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-crisis-safe rounded-full animate-pulse" />
+      <div className="p-4 border-b border-sidebar-border bg-sidebar/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Radio className="w-5 h-5 text-[#5288c1]" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#5288c1] rounded-full animate-pulse" />
+            </div>
+            <h2 className="text-lg font-bold text-foreground tracking-tight">SADA Messenger</h2>
           </div>
-          <h2 className="text-lg font-bold text-foreground">Live Signals</h2>
+          <Badge variant="outline" className="text-[9px] bg-[#2b5278]/20 text-[#5288c1] border-[#5288c1]/30">
+            ENCRYPTED
+          </Badge>
         </div>
-        <p className="text-xs text-muted-foreground mt-1 font-mono">
-          {signals.length} reports • Last 24h
-        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-crisis-safe" />
+          <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">
+            {signals.length} Active Nodes • Network: Omdurman-Central
+          </p>
+        </div>
       </div>
 
       {/* Signal List */}
       <ScrollArea className="flex-1 px-3">
-        <div className="py-3 space-y-2">
-          {signals.map((signal) => (
-            <div
-              key={signal.id}
-              onClick={() => onSignalClick && onSignalClick(signal)}
-              className={`signal-item p-3 rounded-lg border transition-all cursor-pointer ${signal.type === "SOS" || signal.type === "AID"
-                ? "bg-crisis-critical/10 border-crisis-critical shadow-[0_0_15px_rgba(234,56,76,0.2)] animate-pulse"
-                : "bg-surface-elevated border-border hover:border-muted-foreground/5 shadow-sm"
-                }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-xs font-mono text-muted-foreground">
-                  {signal.time}
-                </span>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] px-1.5 py-0 font-bold ${(signal.type === "SOS" || signal.type === "AID") ? "bg-crisis-critical text-white" : typeBadgeStyles[signal.type]
-                    }`}
+        <div className="py-4 space-y-4">
+          {signals.map((signal) => {
+            const isSms = signal.source === "SMS";
+            const isSOS = signal.type === "SOS" || signal.type === "AID";
+
+            return (
+              <div
+                key={signal.id}
+                onClick={() => onSignalClick && onSignalClick(signal)}
+                className={`flex flex-col gap-1 transition-all cursor-pointer group`}
+              >
+                {/* Source Label */}
+                <div className="flex items-center gap-1.5 px-1 mb-0.5">
+                  <span className={`text-[10px] uppercase tracking-wider font-bold ${sourceStyles[signal.source] || "text-muted-foreground"}`}>
+                    {signal.source}
+                  </span>
+                  <div className="h-px flex-1 bg-border/30" />
+                  <span className="text-[10px] font-mono text-muted-foreground opacity-70">
+                    {signal.time}
+                  </span>
+                </div>
+
+                {/* Message Bubble */}
+                <div
+                  className={`relative p-3 rounded-2xl border transition-all ${isSOS
+                    ? "bg-crisis-critical/10 border-crisis-critical/50 shadow-[0_0_15px_rgba(234,56,76,0.15)]"
+                    : isSms
+                      ? "bg-[#2b5278]/40 border-[#5288c1]/30 shadow-sm" // Telegram-ish Blue for SMS
+                      : "bg-surface-elevated border-border" // Default for Proxy
+                    } ${isSms ? "rounded-tl-none ml-1" : "rounded-tr-none mr-1"} group-hover:border-primary/20`}
                 >
-                  #{signal.type}
-                </Badge>
-              </div>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1.5 py-0 font-black h-4 ${isSOS
+                          ? "bg-crisis-critical text-white border-none"
+                          : isSms
+                            ? "bg-[#5288c1] text-white border-none"
+                            : typeBadgeStyles[signal.type]
+                          }`}
+                      >
+                        {signal.type}
+                      </Badge>
+                      <span className={`text-xs font-bold ${isSms ? "text-[#5288c1]" : "text-foreground"}`}>
+                        {signal.location}
+                      </span>
+                    </div>
+                    {isSOS ? (
+                      <AlertTriangle className="w-3.5 h-3.5 text-crisis-critical animate-pulse" />
+                    ) : isSms ? (
+                      <Radio className="w-3 h-3 text-[#5288c1]/70" />
+                    ) : (
+                      <Plus className="w-3 h-3 text-muted-foreground/50" />
+                    )}
+                  </div>
 
-              <div className="mt-2 flex items-center gap-2">
-                {(signal.type === "SOS" || signal.type === "AID") ? (
-                  <AlertTriangle className="w-4 h-4 text-crisis-critical animate-bounce" />
-                ) : (signal.type === "DIRTY" || signal.type === "BROKEN" || signal.type === "POWER" || signal.type === "WATER") ? (
-                  <AlertTriangle className="w-3.5 h-3.5 text-crisis-warning" />
-                ) : signal.type === "RESTORED" ? (
-                  <Droplet className="w-3.5 h-3.5 text-crisis-safe" />
-                ) : (
-                  <AlertTriangle className="w-3.5 h-3.5 text-crisis-critical" />
-                )}
-                <span className={`text-sm font-medium ${(signal.type === "SOS" || signal.type === "AID") ? "text-crisis-critical font-bold" : "text-foreground"}`}>
-                  {signal.location}
-                </span>
-              </div>
+                  {/* Body Text (The message itself) */}
+                  <p className={`text-sm leading-relaxed font-medium ${isSms ? "text-white/90" : "text-foreground/90"}`}>
+                    {signal.body}
+                  </p>
 
-              <div className="mt-1.5 flex items-center justify-between">
-                <span className={`text-xs font-mono ${sourceStyles[signal.source] || "text-muted-foreground"}`}>
-                  via {signal.source}
-                </span>
+                  <div className="mt-1.5 flex justify-end">
+                    <span className="text-[9px] font-mono text-muted-foreground opacity-50 italic">
+                      Received: {signal.time}
+                    </span>
+                  </div>
+
+                  {/* Bubble Tail */}
+                  <div className={`absolute top-0 w-2 h-2 ${isSms
+                    ? "-left-1 border-l border-t border-[#5288c1]/20 bg-[#24374a] rotate-45"
+                    : "-right-1 border-r border-t border-border bg-surface-elevated rotate-45"
+                    } ${isSOS ? "bg-crisis-critical/10 border-crisis-critical/20" : ""}`}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
     </div>

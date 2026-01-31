@@ -24,7 +24,7 @@ export function IndicatorPanel({ event, onClose }: IndicatorPanelProps) {
     const indicators = [
         { name: "VIIRS", label: "Satellite Night Lights", category: "Power" },
         { name: "GRID_GIS", label: "Grid Infrastructure", category: "Power" },
-        { name: "WAPOR", label: "Soil Moisture", category: "Water" },
+        { name: "WAPOR", label: "WAPOR", category: "Water" },
         { name: "FAO_AQUASTAT", label: "Water Stress Index", category: "Water" },
         { name: "HDX_HOT", label: "Infrastructure Damage", category: "Ground Truth" },
         { name: "HUMAN_REPORTS", label: "Crowd Reports", category: "Ground Truth" },
